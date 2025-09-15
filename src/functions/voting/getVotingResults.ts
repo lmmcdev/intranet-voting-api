@@ -7,18 +7,25 @@ import {
 import { VotingService } from "../../containers/services/VotingService";
 import { ResponseHelper } from "../../containers/utils/ResponseHelper";
 import { getDependencies } from "../../containers/utils/Dependencies";
+import { AuthHelper } from "../../containers/utils/AuthHelper";
 
 export async function getVotingResults(
   request: HttpRequest,
   context: InvocationContext
 ): Promise<HttpResponseInit> {
   try {
-    const { votingService } = await getDependencies();
-
     if (request.method !== "GET") {
       return ResponseHelper.methodNotAllowed();
     }
 
+    // Require authentication - temporarily allow any authenticated user in development
+    const authResult = await AuthHelper.requireAuth(request, context);
+    if (!authResult.success) {
+      return authResult.response;
+    }
+    const user = authResult.user;
+
+    const { votingService } = await getDependencies();
     const votingPeriodId = request.params.id;
 
     if (!votingPeriodId) {
@@ -27,7 +34,7 @@ export async function getVotingResults(
 
     const results = await votingService.getVotingResults(votingPeriodId);
 
-    context.log(`Retrieved results for voting period: ${votingPeriodId}`);
+    context.log(`User ${user.email} retrieved results for voting period: ${votingPeriodId}`);
     return ResponseHelper.ok(results);
   } catch (error) {
     context.error("Error retrieving voting results:", error);
@@ -42,7 +49,7 @@ export async function getVotingResults(
 
 app.http("get-voting-results", {
   methods: ["GET"],
-  authLevel: "anonymous",
+  authLevel: "function",
   route: "voting/results/{id}",
   handler: getVotingResults,
 });

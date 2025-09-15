@@ -56,12 +56,12 @@ export class VotingPeriodRepository {
   async findRecentPeriods(limit: number = 10): Promise<VotingPeriod[]> {
     const container = await this.cosmosClient.getContainer(this.containerName);
     const querySpec = {
-      query: `SELECT TOP ${limit} * FROM c ORDER BY c.year DESC, c.month DESC`,
+      query: 'SELECT * FROM c ORDER BY c.year DESC, c.month DESC',
       parameters: []
     };
     
     const { resources } = await container.items.query<VotingPeriod>(querySpec).fetchAll();
-    return resources;
+    return resources.slice(0, limit);
   }
 
   async update(id: string, votingPeriod: VotingPeriod): Promise<VotingPeriod> {

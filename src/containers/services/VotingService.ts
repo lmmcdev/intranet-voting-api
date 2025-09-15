@@ -1,4 +1,4 @@
-import { Nomination, CreateNominationDto, NominationWithEmployee } from '../models/Nomination';
+import { Nomination, CreateNominationDto, UpdateNominationDto, NominationWithEmployee } from '../models/Nomination';
 import { VotingPeriod, VotingPeriodStatus } from '../models/VotingPeriod';
 import { VoteResult, VotingPeriodResults } from '../models/VoteResult';
 import { NominationRepository } from '../repositories/NominationRepository';
@@ -105,6 +105,46 @@ export class VotingService {
     return Array.from(voteMap.entries())
       .map(([employeeId, count]) => ({ employeeId, count }))
       .sort((a, b) => b.count - a.count);
+  }
+
+  async updateNomination(nominatorEmail: string, updateData: UpdateNominationDto): Promise<Nomination> {
+    const currentPeriod = await this.getCurrentVotingPeriod();
+    if (!currentPeriod) {
+      throw new Error('No active voting period found');
+    }
+
+    // Find existing nomination by nominator email and current voting period
+    const existingNomination = await this.nominationRepository.findByNominatorEmail(nominatorEmail, currentPeriod.id);
+    if (!existingNomination) {
+      throw new Error('No existing nomination found to update');
+    }
+
+    // Validate the updated data if provided
+    if (updateData.nominatedEmployeeId) {
+      await this.validationService.validateEmployee(updateData.nominatedEmployeeId);
+      
+      // Check for self-nomination
+      const updateNominationData: CreateNominationDto = {
+        nominatedEmployeeId: updateData.nominatedEmployeeId,
+        nominatorEmail: nominatorEmail,
+        reason: updateData.reason || existingNomination.reason
+      };
+      await this.validationService.validateSelfNomination(updateNominationData);
+    }
+
+    if (updateData.reason) {
+      await this.validationService.validateNominationReason(updateData.reason);
+    }
+
+    // Update the nomination
+    const updatedNomination: Nomination = {
+      ...existingNomination,
+      nominatedEmployeeId: updateData.nominatedEmployeeId || existingNomination.nominatedEmployeeId,
+      reason: updateData.reason || existingNomination.reason,
+      updatedAt: new Date()
+    };
+
+    return await this.nominationRepository.update(existingNomination.id, updatedNomination);
   }
 
   private generateId(): string {

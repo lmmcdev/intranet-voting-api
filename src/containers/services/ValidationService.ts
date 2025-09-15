@@ -1,15 +1,15 @@
 import { CreateNominationDto } from '../models/Nomination';
 import { Employee } from '../models/Employee';
 import { NominationRepository } from '../repositories/NominationRepository';
-import { EmployeeRepository } from '../repositories/EmployeeRepository';
+import { AzureEmployeeService } from './AzureEmployeeService';
 
 export class ValidationService {
   private nominationRepository: NominationRepository;
-  private employeeRepository: EmployeeRepository;
+  private azureEmployeeService: AzureEmployeeService;
 
-  constructor(nominationRepository: NominationRepository, employeeRepository: EmployeeRepository) {
+  constructor(nominationRepository: NominationRepository, azureEmployeeService: AzureEmployeeService) {
     this.nominationRepository = nominationRepository;
-    this.employeeRepository = employeeRepository;
+    this.azureEmployeeService = azureEmployeeService;
   }
 
   async validateNomination(nominationData: CreateNominationDto, votingPeriodId: string): Promise<void> {
@@ -20,8 +20,8 @@ export class ValidationService {
     this.validateSelfNomination(nominationData);
   }
 
-  private async validateEmployee(employeeId: string): Promise<void> {
-    const employee = await this.employeeRepository.findById(employeeId);
+  async validateEmployee(employeeId: string): Promise<void> {
+    const employee = await this.azureEmployeeService.getEmployeeById(employeeId);
     if (!employee) {
       throw new Error('Employee not found');
     }
@@ -35,7 +35,12 @@ export class ValidationService {
       throw new Error('Invalid nominator email format');
     }
 
-    const nominator = await this.employeeRepository.findByEmail(nominatorEmail);
+    // Skip nominator validation when SKIP_AUTH is enabled (for development)
+    if (process.env.SKIP_AUTH === 'true') {
+      return; // Allow any email in development
+    }
+
+    const nominator = await this.azureEmployeeService.getEmployeeByEmail(nominatorEmail);
     if (!nominator) {
       throw new Error('Nominator must be an active employee');
     }
@@ -44,7 +49,7 @@ export class ValidationService {
     }
   }
 
-  private validateNominationReason(reason: string): void {
+  validateNominationReason(reason: string): void {
     if (!reason || reason.trim().length === 0) {
       throw new Error('Nomination reason is required');
     }
@@ -66,8 +71,8 @@ export class ValidationService {
     }
   }
 
-  private async validateSelfNomination(nominationData: CreateNominationDto): Promise<void> {
-    const nominatedEmployee = await this.employeeRepository.findById(nominationData.nominatedEmployeeId);
+  async validateSelfNomination(nominationData: CreateNominationDto): Promise<void> {
+    const nominatedEmployee = await this.azureEmployeeService.getEmployeeById(nominationData.nominatedEmployeeId);
     if (nominatedEmployee && nominatedEmployee.email === nominationData.nominatorEmail) {
       throw new Error('Self-nomination is not allowed');
     }

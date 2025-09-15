@@ -5,21 +5,21 @@ import {
   InvocationContext,
 } from "@azure/functions";
 import { VotingService } from "../../containers/services/VotingService";
-import { CreateNominationDto } from "../../containers/models/Nomination";
+import { UpdateNominationDto } from "../../containers/models/Nomination";
 import { ResponseHelper } from "../../containers/utils/ResponseHelper";
 import { getDependencies } from "../../containers/utils/Dependencies";
 import { AuthHelper } from "../../containers/utils/AuthHelper";
 
-export async function createNomination(
+export async function updateNomination(
   request: HttpRequest,
   context: InvocationContext
 ): Promise<HttpResponseInit> {
   try {
-    if (request.method !== "POST") {
+    if (request.method !== "PUT") {
       return ResponseHelper.methodNotAllowed();
     }
 
-    // Require authentication - any authenticated user can create nominations
+    // Require authentication - any authenticated user can update their own nomination
     const authResult = await AuthHelper.requireAuth(request, context);
     if (!authResult.success) {
       return authResult.response;
@@ -27,26 +27,21 @@ export async function createNomination(
     const user = authResult.user;
 
     const { votingService } = await getDependencies();
-    const body = (await request.json()) as CreateNominationDto;
+    const body = (await request.json()) as UpdateNominationDto;
 
-    // Use the authenticated user's email as the nominator
-    const nominationData = {
-      ...body,
-      nominatorEmail: user.email
-    };
-
-    if (!nominationData.nominatedEmployeeId || !nominationData.reason) {
+    // Validate that at least one field is provided for update
+    if (!body.nominatedEmployeeId && !body.reason) {
       return ResponseHelper.badRequest(
-        "Missing required fields: nominatedEmployeeId, reason"
+        "At least one field (nominatedEmployeeId or reason) must be provided for update"
       );
     }
 
-    const nomination = await votingService.createNomination(nominationData);
+    const updatedNomination = await votingService.updateNomination(user.email, body);
 
-    context.log(`User ${user.email} created nomination:`, nomination.id);
-    return ResponseHelper.created(nomination);
+    context.log(`User ${user.email} updated their nomination:`, updatedNomination.id);
+    return ResponseHelper.ok(updatedNomination);
   } catch (error) {
-    context.error("Error creating nomination:", error);
+    context.error("Error updating nomination:", error);
 
     if (error instanceof Error) {
       return ResponseHelper.badRequest(error.message);
@@ -56,9 +51,9 @@ export async function createNomination(
   }
 }
 
-app.http("create-nomination", {
-  methods: ["POST"],
+app.http("update-nomination", {
+  methods: ["PUT"],
   authLevel: "function",
-  route: "nominations",
-  handler: createNomination,
+  route: "nominations/update",
+  handler: updateNomination,
 });

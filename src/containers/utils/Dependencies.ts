@@ -3,6 +3,7 @@ import { EmployeeRepository } from "../repositories/EmployeeRepository";
 import { NominationRepository } from "../repositories/NominationRepository";
 import { VotingPeriodRepository } from "../repositories/VotingPeriodRepository";
 import { EmployeeService } from "../services/EmployeeService";
+import { AzureEmployeeService } from "../services/AzureEmployeeService";
 import { VotingService } from "../services/VotingService";
 import { ValidationService } from "../services/ValidationService";
 import { NotificationService } from "../services/NotificationService";
@@ -18,6 +19,7 @@ interface Dependencies {
   nominationRepository: NominationRepository;
   votingPeriodRepository: VotingPeriodRepository;
   employeeService: EmployeeService;
+  azureEmployeeService: AzureEmployeeService;
   votingService: VotingService;
   validationService: ValidationService;
   notificationService: NotificationService;
@@ -47,11 +49,12 @@ export async function getDependencies(): Promise<Dependencies> {
     const nominationRepository = new NominationRepository(cosmosClient);
     const votingPeriodRepository = new VotingPeriodRepository(cosmosClient);
 
+    const employeeService = new EmployeeService(employeeRepository);
+    const azureEmployeeService = new AzureEmployeeService();
     const validationService = new ValidationService(
       nominationRepository,
-      employeeRepository
+      azureEmployeeService
     );
-    const employeeService = new EmployeeService(employeeRepository);
     const votingService = new VotingService(
       nominationRepository,
       votingPeriodRepository,
@@ -66,6 +69,7 @@ export async function getDependencies(): Promise<Dependencies> {
       nominationRepository,
       votingPeriodRepository,
       employeeService,
+      azureEmployeeService,
       votingService,
       validationService,
       notificationService,

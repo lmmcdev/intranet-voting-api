@@ -5,12 +5,18 @@ export interface Nomination {
   votingPeriodId: string;
   reason: string;
   createdAt: Date;
+  updatedAt?: Date;
 }
 
 export interface CreateNominationDto {
   nominatedEmployeeId: string;
   nominatorEmail: string;
   reason: string;
+}
+
+export interface UpdateNominationDto {
+  nominatedEmployeeId?: string;
+  reason?: string;
 }
 
 export interface NominationWithEmployee extends Nomination {

@@ -40,37 +40,48 @@ export class NominationRepository {
   }
 
   async findByVotingPeriodWithEmployee(votingPeriodId: string): Promise<NominationWithEmployee[]> {
-    const container = await this.cosmosClient.getContainer(this.containerName);
-    const querySpec = {
-      query: `
-        SELECT 
-          n.*,
-          e.name as employeeName,
-          e.department as employeeDepartment,
-          e.position as employeePosition
-        FROM nominations n 
-        JOIN employees e ON n.nominatedEmployeeId = e.id
-        WHERE n.votingPeriodId = @votingPeriodId 
-        ORDER BY n.createdAt DESC
-      `,
-      parameters: [{ name: '@votingPeriodId', value: votingPeriodId }]
-    };
+    // First get all nominations for the voting period
+    const nominations = await this.findByVotingPeriod(votingPeriodId);
     
-    const { resources } = await container.items.query(querySpec).fetchAll();
+    if (nominations.length === 0) {
+      return [];
+    }
+
+    // Get employee container to fetch employee details
+    const employeeContainer = await this.cosmosClient.getContainer('employees');
     
-    return resources.map(item => ({
-      id: item.id,
-      nominatedEmployeeId: item.nominatedEmployeeId,
-      nominatorEmail: item.nominatorEmail,
-      votingPeriodId: item.votingPeriodId,
-      reason: item.reason,
-      createdAt: new Date(item.createdAt),
-      nominatedEmployee: {
-        name: item.employeeName,
-        department: item.employeeDepartment,
-        position: item.employeePosition
+    // Map nominations with employee details
+    const nominationsWithEmployee: NominationWithEmployee[] = [];
+    
+    for (const nomination of nominations) {
+      try {
+        // Try to get employee details
+        const { resource: employee } = await employeeContainer
+          .item(nomination.nominatedEmployeeId, nomination.nominatedEmployeeId)
+          .read();
+        
+        nominationsWithEmployee.push({
+          ...nomination,
+          nominatedEmployee: {
+            name: employee?.name || 'Unknown Employee',
+            department: employee?.department || 'Unknown',
+            position: employee?.position || 'Unknown'
+          }
+        });
+      } catch (error) {
+        // If employee not found, use placeholder values
+        nominationsWithEmployee.push({
+          ...nomination,
+          nominatedEmployee: {
+            name: 'Unknown Employee',
+            department: 'Unknown',
+            position: 'Unknown'
+          }
+        });
       }
-    }));
+    }
+    
+    return nominationsWithEmployee;
   }
 
   async findByNominatorAndPeriod(nominatorEmail: string, votingPeriodId: string): Promise<Nomination | null> {
@@ -99,5 +110,25 @@ export class NominationRepository {
     
     const { resources } = await container.items.query<number>(querySpec).fetchAll();
     return resources[0] || 0;
+  }
+
+  async update(id: string, nomination: Nomination): Promise<Nomination> {
+    const container = await this.cosmosClient.getContainer(this.containerName);
+    const { resource } = await container.item(id, id).replace(nomination);
+    return resource as Nomination;
+  }
+
+  async findByNominatorEmail(nominatorEmail: string, votingPeriodId: string): Promise<Nomination | null> {
+    const container = await this.cosmosClient.getContainer(this.containerName);
+    const querySpec = {
+      query: 'SELECT * FROM c WHERE c.nominatorEmail = @nominatorEmail AND c.votingPeriodId = @votingPeriodId',
+      parameters: [
+        { name: '@nominatorEmail', value: nominatorEmail },
+        { name: '@votingPeriodId', value: votingPeriodId }
+      ]
+    };
+    
+    const { resources } = await container.items.query<Nomination>(querySpec).fetchAll();
+    return resources.length > 0 ? resources[0] : null;
   }
 }

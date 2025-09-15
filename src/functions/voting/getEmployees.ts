@@ -7,21 +7,30 @@ import {
 import { EmployeeService } from "../../containers/services/EmployeeService";
 import { ResponseHelper } from "../../containers/utils/ResponseHelper";
 import { getDependencies } from "../../containers/utils/Dependencies";
+import { AuthHelper } from "../../containers/utils/AuthHelper";
 
 export async function getEmployees(
   request: HttpRequest,
   context: InvocationContext
 ): Promise<HttpResponseInit> {
   try {
-    const { employeeService } = await getDependencies();
-
     if (request.method !== "GET") {
       return ResponseHelper.methodNotAllowed();
     }
 
-    const employees = await employeeService.getAllActiveEmployees();
+    // Require authentication - any authenticated user can view employees
+    const authResult = await AuthHelper.requireAuth(request, context);
+    if (!authResult.success) {
+      return authResult.response;
+    }
+    const user = authResult.user;
 
-    context.log(`Retrieved ${employees.length} active employees`);
+    const { azureEmployeeService } = await getDependencies();
+    
+    // AzureEmployeeService automatically handles fallback to mock data
+    const employees = await azureEmployeeService.getAllActiveEmployees();
+
+    context.log(`User ${user.email} retrieved ${employees.length} active employees`);
     return ResponseHelper.ok(employees);
   } catch (error) {
     context.error("Error retrieving employees:", error);
@@ -31,7 +40,7 @@ export async function getEmployees(
 
 app.http("get-employees", {
   methods: ["GET"],
-  authLevel: "anonymous",
+  authLevel: "function",
   route: "employees",
   handler: getEmployees,
 });

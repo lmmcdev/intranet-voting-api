@@ -7,18 +7,25 @@ import {
 import { VotingService } from "../../containers/services/VotingService";
 import { ResponseHelper } from "../../containers/utils/ResponseHelper";
 import { getDependencies } from "../../containers/utils/Dependencies";
+import { AuthHelper } from "../../containers/utils/AuthHelper";
 
 export async function getCurrentVoting(
   request: HttpRequest,
   context: InvocationContext
 ): Promise<HttpResponseInit> {
   try {
-    const { votingService } = await getDependencies();
-
     if (request.method !== "GET") {
       return ResponseHelper.methodNotAllowed();
     }
 
+    // Require authentication - any authenticated user can view current voting
+    const authResult = await AuthHelper.requireAuth(request, context);
+    if (!authResult.success) {
+      return authResult.response;
+    }
+    const user = authResult.user;
+
+    const { votingService } = await getDependencies();
     const currentPeriod = await votingService.getCurrentVotingPeriod();
 
     if (!currentPeriod) {
@@ -34,7 +41,7 @@ export async function getCurrentVoting(
     };
 
     context.log(
-      `Current voting period: ${currentPeriod.year}-${currentPeriod.month}`
+      `User ${user.email} accessed current voting period: ${currentPeriod.year}-${currentPeriod.month}`
     );
     return ResponseHelper.ok(response);
   } catch (error) {
@@ -45,7 +52,7 @@ export async function getCurrentVoting(
 
 app.http("get-current-voting", {
   methods: ["GET"],
-  authLevel: "anonymous",
+  authLevel: "function",
   route: "voting/current",
   handler: getCurrentVoting,
 });

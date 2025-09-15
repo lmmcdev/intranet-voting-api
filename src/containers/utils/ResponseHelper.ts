@@ -75,6 +75,34 @@ export class ResponseHelper {
     };
   }
 
+  static unauthorized(message: string = 'Unauthorized'): HttpResponseInit {
+    return {
+      status: 401,
+      jsonBody: {
+        success: false,
+        error: message
+      },
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      }
+    };
+  }
+
+  static forbidden(message: string = 'Forbidden'): HttpResponseInit {
+    return {
+      status: 403,
+      jsonBody: {
+        success: false,
+        error: message
+      },
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      }
+    };
+  }
+
   static internalServerError(message: string = 'Internal server error'): HttpResponseInit {
     return {
       status: 500,
