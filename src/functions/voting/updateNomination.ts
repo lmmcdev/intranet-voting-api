@@ -30,9 +30,9 @@ export async function updateNomination(
     const body = (await request.json()) as UpdateNominationDto;
 
     // Validate that at least one field is provided for update
-    if (!body.nominatedEmployeeId && !body.reason) {
+    if (!body.nominatedEmployeeId && !body.reason && !body.criteria) {
       return ResponseHelper.badRequest(
-        "At least one field (nominatedEmployeeId or reason) must be provided for update"
+        "At least one field (nominatedEmployeeId, reason, or criteria) must be provided for update"
       );
     }
 

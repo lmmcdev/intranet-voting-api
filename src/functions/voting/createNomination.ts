@@ -35,9 +35,9 @@ export async function createNomination(
       nominatorEmail: user.email,
     };
 
-    if (!nominationData.nominatedEmployeeId || !nominationData.reason) {
+    if (!nominationData.nominatedEmployeeId || !nominationData.reason || !nominationData.criteria) {
       return ResponseHelper.badRequest(
-        "Missing required fields: nominatedEmployeeId, reason"
+        "Missing required fields: nominatedEmployeeId, reason, criteria"
       );
     }
 

@@ -1,3 +1,5 @@
+import { Criteria } from './Nomination';
+
 export interface VoteResult {
   votingPeriodId: string;
   employeeId: string;
@@ -7,6 +9,7 @@ export interface VoteResult {
   nominationCount: number;
   percentage: number;
   rank: number;
+  averageCriteria: Criteria;
 }
 
 export interface VotingPeriodResults {

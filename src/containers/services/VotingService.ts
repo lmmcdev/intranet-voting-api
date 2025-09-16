@@ -1,4 +1,4 @@
-import { Nomination, CreateNominationDto, UpdateNominationDto, NominationWithEmployee } from '../models/Nomination';
+import { Nomination, CreateNominationDto, UpdateNominationDto, NominationWithEmployee, Criteria } from '../models/Nomination';
 import { VotingPeriod, VotingPeriodStatus } from '../models/VotingPeriod';
 import { VoteResult, VotingPeriodResults } from '../models/VoteResult';
 import { NominationRepository } from '../repositories/NominationRepository';
@@ -52,7 +52,24 @@ export class VotingService {
       return [];
     }
 
-    return await this.nominationRepository.findByVotingPeriodWithEmployee(currentPeriod.id);
+    const nominations = await this.nominationRepository.findByVotingPeriod(currentPeriod.id);
+
+    const nominationsWithEmployee: NominationWithEmployee[] = [];
+
+    for (const nomination of nominations) {
+      const employee = await this.azureEmployeeService.getEmployeeById(nomination.nominatedEmployeeId);
+
+      nominationsWithEmployee.push({
+        ...nomination,
+        nominatedEmployee: {
+          name: employee?.name || 'Unknown Employee',
+          department: employee?.department || 'Unknown',
+          position: employee?.position || 'Unknown'
+        }
+      });
+    }
+
+    return nominationsWithEmployee;
   }
 
   async getVotingResults(votingPeriodId: string): Promise<VotingPeriodResults> {
@@ -76,7 +93,8 @@ export class VotingService {
           position: employee?.position || 'Unknown',
           nominationCount: vote.count,
           percentage: (vote.count / totalNominations) * 100,
-          rank: index + 1
+          rank: index + 1,
+          averageCriteria: vote.averageCriteria
         };
       })
     );
@@ -94,16 +112,48 @@ export class VotingService {
     };
   }
 
-  private aggregateVotes(nominations: Nomination[]): { employeeId: string; count: number }[] {
-    const voteMap = new Map<string, number>();
-    
+  private aggregateVotes(nominations: Nomination[]): { employeeId: string; count: number; averageCriteria: Criteria }[] {
+    const voteMap = new Map<string, { count: number, totalCriteria: Criteria }>();
+
     nominations.forEach(nomination => {
-      const currentCount = voteMap.get(nomination.nominatedEmployeeId) || 0;
-      voteMap.set(nomination.nominatedEmployeeId, currentCount + 1);
+      const current = voteMap.get(nomination.nominatedEmployeeId) || {
+        count: 0,
+        totalCriteria: {
+          communication: 0,
+          innovation: 0,
+          leadership: 0,
+          problemSolving: 0,
+          reliability: 0,
+          teamwork: 0
+        }
+      };
+
+      voteMap.set(nomination.nominatedEmployeeId, {
+        count: current.count + 1,
+        totalCriteria: {
+          communication: current.totalCriteria.communication + nomination.criteria.communication,
+          innovation: current.totalCriteria.innovation + nomination.criteria.innovation,
+          leadership: current.totalCriteria.leadership + nomination.criteria.leadership,
+          problemSolving: current.totalCriteria.problemSolving + nomination.criteria.problemSolving,
+          reliability: current.totalCriteria.reliability + nomination.criteria.reliability,
+          teamwork: current.totalCriteria.teamwork + nomination.criteria.teamwork
+        }
+      });
     });
 
     return Array.from(voteMap.entries())
-      .map(([employeeId, count]) => ({ employeeId, count }))
+      .map(([employeeId, data]) => ({
+        employeeId,
+        count: data.count,
+        averageCriteria: {
+          communication: Math.round((data.totalCriteria.communication / data.count) * 10) / 10,
+          innovation: Math.round((data.totalCriteria.innovation / data.count) * 10) / 10,
+          leadership: Math.round((data.totalCriteria.leadership / data.count) * 10) / 10,
+          problemSolving: Math.round((data.totalCriteria.problemSolving / data.count) * 10) / 10,
+          reliability: Math.round((data.totalCriteria.reliability / data.count) * 10) / 10,
+          teamwork: Math.round((data.totalCriteria.teamwork / data.count) * 10) / 10
+        }
+      }))
       .sort((a, b) => b.count - a.count);
   }
 
@@ -127,7 +177,8 @@ export class VotingService {
       const updateNominationData: CreateNominationDto = {
         nominatedEmployeeId: updateData.nominatedEmployeeId,
         nominatorEmail: nominatorEmail,
-        reason: updateData.reason || existingNomination.reason
+        reason: updateData.reason || existingNomination.reason,
+        criteria: updateData.criteria || existingNomination.criteria
       };
       await this.validationService.validateSelfNomination(updateNominationData);
     }
@@ -136,11 +187,16 @@ export class VotingService {
       await this.validationService.validateNominationReason(updateData.reason);
     }
 
+    if (updateData.criteria) {
+      this.validationService.validateCriteria(updateData.criteria);
+    }
+
     // Update the nomination
     const updatedNomination: Nomination = {
       ...existingNomination,
       nominatedEmployeeId: updateData.nominatedEmployeeId || existingNomination.nominatedEmployeeId,
       reason: updateData.reason || existingNomination.reason,
+      criteria: updateData.criteria || existingNomination.criteria,
       updatedAt: new Date()
     };
 

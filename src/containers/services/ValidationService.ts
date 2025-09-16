@@ -1,4 +1,4 @@
-import { CreateNominationDto } from '../models/Nomination';
+import { CreateNominationDto, Criteria } from '../models/Nomination';
 import { Employee } from '../models/Employee';
 import { NominationRepository } from '../repositories/NominationRepository';
 import { AzureEmployeeService } from './AzureEmployeeService';
@@ -16,6 +16,7 @@ export class ValidationService {
     await this.validateEmployee(nominationData.nominatedEmployeeId);
     await this.validateNominator(nominationData.nominatorEmail);
     await this.validateNominationReason(nominationData.reason);
+    this.validateCriteria(nominationData.criteria);
     await this.validateDuplicateNomination(nominationData, votingPeriodId);
     this.validateSelfNomination(nominationData);
   }
@@ -58,6 +59,27 @@ export class ValidationService {
     }
     if (reason.length > 500) {
       throw new Error('Nomination reason must not exceed 500 characters');
+    }
+  }
+
+  validateCriteria(criteria: Criteria): void {
+    if (!criteria) {
+      throw new Error('Criteria scoring is required');
+    }
+
+    const requiredFields = ['communication', 'innovation', 'leadership', 'problemSolving', 'reliability', 'teamwork'];
+    const scores = [criteria.communication, criteria.innovation, criteria.leadership, criteria.problemSolving, criteria.reliability, criteria.teamwork];
+
+    for (let i = 0; i < requiredFields.length; i++) {
+      const field = requiredFields[i];
+      const score = scores[i];
+
+      if (score === undefined || score === null) {
+        throw new Error(`${field} score is required`);
+      }
+      if (!Number.isInteger(score) || score < 1 || score > 5) {
+        throw new Error(`${field} score must be an integer between 1 and 5`);
+      }
     }
   }
 
