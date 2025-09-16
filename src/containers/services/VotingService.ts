@@ -3,24 +3,24 @@ import { VotingPeriod, VotingPeriodStatus } from '../models/VotingPeriod';
 import { VoteResult, VotingPeriodResults } from '../models/VoteResult';
 import { NominationRepository } from '../repositories/NominationRepository';
 import { VotingPeriodRepository } from '../repositories/VotingPeriodRepository';
-import { EmployeeRepository } from '../repositories/EmployeeRepository';
+import { AzureEmployeeService } from './AzureEmployeeService';
 import { ValidationService } from './ValidationService';
 
 export class VotingService {
   private nominationRepository: NominationRepository;
   private votingPeriodRepository: VotingPeriodRepository;
-  private employeeRepository: EmployeeRepository;
+  private azureEmployeeService: AzureEmployeeService;
   private validationService: ValidationService;
 
   constructor(
     nominationRepository: NominationRepository,
     votingPeriodRepository: VotingPeriodRepository,
-    employeeRepository: EmployeeRepository,
+    azureEmployeeService: AzureEmployeeService,
     validationService: ValidationService
   ) {
     this.nominationRepository = nominationRepository;
     this.votingPeriodRepository = votingPeriodRepository;
-    this.employeeRepository = employeeRepository;
+    this.azureEmployeeService = azureEmployeeService;
     this.validationService = validationService;
   }
 
@@ -67,7 +67,7 @@ export class VotingService {
 
     const results: VoteResult[] = await Promise.all(
       employeeVotes.map(async (vote, index) => {
-        const employee = await this.employeeRepository.findById(vote.employeeId);
+        const employee = await this.azureEmployeeService.getEmployeeById(vote.employeeId);
         return {
           votingPeriodId,
           employeeId: vote.employeeId,

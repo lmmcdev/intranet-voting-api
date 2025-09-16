@@ -58,7 +58,7 @@ export async function getDependencies(): Promise<Dependencies> {
     const votingService = new VotingService(
       nominationRepository,
       votingPeriodRepository,
-      employeeRepository,
+      azureEmployeeService,
       validationService
     );
     const notificationService = new NotificationService();

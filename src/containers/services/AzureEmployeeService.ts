@@ -80,11 +80,15 @@ export class AzureEmployeeService {
         nextPageToken = result.nextPageToken;
         hasMore = result.hasMore;
 
-        console.log(`Current total: ${allEmployees.length} employees, hasMore: ${hasMore}`);
+        console.log(
+          `Current total: ${allEmployees.length} employees, hasMore: ${hasMore}`
+        );
 
         // Safety check to prevent infinite loops
         if (allEmployees.length > 10000) {
-          console.warn("Reached safety limit of 10000 employees, stopping pagination");
+          console.warn(
+            "Reached safety limit of 10000 employees, stopping pagination"
+          );
           break;
         }
       }
@@ -177,7 +181,6 @@ export class AzureEmployeeService {
   }
 
   async getEmployeeById(id: string): Promise<Employee | null> {
-    // If Azure AD not configured, search in mock data
     if (!this.graphClient) {
       const mockEmployees = await this.getAllActiveEmployeesMock();
       return mockEmployees.find((emp) => emp.id === id) || null;
@@ -209,7 +212,10 @@ export class AzureEmployeeService {
     }
   }
 
-  async searchEmployees(query: string, limit: number = 10): Promise<Employee[]> {
+  async searchEmployees(
+    query: string,
+    limit: number = 10
+  ): Promise<Employee[]> {
     console.log(`Searching employees with query: "${query}", limit: ${limit}`);
 
     // If Azure AD not configured, search in mock data
@@ -224,48 +230,61 @@ export class AzureEmployeeService {
       console.log("Getting all employees to perform client-side search");
       const allEmployees = await this.getAllActiveEmployees();
 
-      console.log(`Searching through ${allEmployees.length} employees for "${query}"`);
+      console.log(
+        `Searching through ${allEmployees.length} employees for "${query}"`
+      );
 
       // Filter and sort client-side with flexible matching
       return this.filterAndSortEmployees(allEmployees, query, limit);
     } catch (error) {
-      console.error("Error searching users from Azure AD, falling back to mock data:", error);
+      console.error(
+        "Error searching users from Azure AD, falling back to mock data:",
+        error
+      );
       const mockEmployees = await this.getAllActiveEmployeesMock();
       return this.filterAndSortEmployees(mockEmployees, query, limit);
     }
   }
 
-  private filterAndSortEmployees(employees: Employee[], query: string, limit: number): Employee[] {
+  private filterAndSortEmployees(
+    employees: Employee[],
+    query: string,
+    limit: number
+  ): Employee[] {
     const lowerQuery = query.toLowerCase();
 
     // Score employees based on match quality
-    const scoredEmployees = employees.map(emp => {
-      let score = 0;
-      const lowerName = emp.name.toLowerCase();
-      const lowerEmail = emp.email.toLowerCase();
-      const lowerDept = emp.department.toLowerCase();
-      const lowerPos = emp.position.toLowerCase();
+    const scoredEmployees = employees
+      .map((emp) => {
+        let score = 0;
+        const lowerName = emp.name.toLowerCase();
+        const lowerEmail = emp.email.toLowerCase();
+        const lowerDept = emp.department.toLowerCase();
+        const lowerPos = emp.position.toLowerCase();
 
-      // Prioritize exact name matches
-      if (lowerName === lowerQuery) score += 1000;
-      else if (lowerName.startsWith(lowerQuery)) score += 500;
-      else if (lowerName.includes(lowerQuery)) score += 100;
+        // Prioritize exact name matches
+        if (lowerName === lowerQuery) score += 1000;
+        else if (lowerName.startsWith(lowerQuery)) score += 500;
+        else if (lowerName.includes(lowerQuery)) score += 100;
 
-      // Email matches
-      if (lowerEmail.startsWith(lowerQuery)) score += 300;
-      else if (lowerEmail.includes(lowerQuery)) score += 50;
+        // Email matches
+        if (lowerEmail.startsWith(lowerQuery)) score += 300;
+        else if (lowerEmail.includes(lowerQuery)) score += 50;
 
-      // Department and position matches
-      if (lowerDept.includes(lowerQuery)) score += 25;
-      if (lowerPos.includes(lowerQuery)) score += 25;
+        // Department and position matches
+        if (lowerDept.includes(lowerQuery)) score += 25;
+        if (lowerPos.includes(lowerQuery)) score += 25;
 
-      return { employee: emp, score };
-    })
-    .filter(item => item.score > 0)
-    .sort((a, b) => b.score - a.score || a.employee.name.localeCompare(b.employee.name))
-    .slice(0, limit);
+        return { employee: emp, score };
+      })
+      .filter((item) => item.score > 0)
+      .sort(
+        (a, b) =>
+          b.score - a.score || a.employee.name.localeCompare(b.employee.name)
+      )
+      .slice(0, limit);
 
-    return scoredEmployees.map(item => item.employee);
+    return scoredEmployees.map((item) => item.employee);
   }
 
   async getEmployeeByEmail(email: string): Promise<Employee | null> {
