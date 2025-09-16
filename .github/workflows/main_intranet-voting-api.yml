@@ -118,8 +118,24 @@ jobs:
       - name: Health check
         run: |
           echo "Waiting for deployment to be ready..."
-          sleep 30
-          if [ -n "${{ steps.deploy-to-azure.outputs.webapp-url }}" ]; then
-            curl -f "${{ steps.deploy-to-azure.outputs.webapp-url }}/api/health" || echo "Health check failed or endpoint not available"
-          fi
+          sleep 60
+          echo "Testing health endpoint..."
+
+          # Try multiple possible health endpoint URLs
+          HEALTH_URLS=(
+            "https://intranet-voting-api.azurewebsites.net/api/health"
+            "https://intranet-voting-api-h4g9csgzgfbdgch7.eastus2-01.azurewebsites.net/api/health"
+          )
+
+          for url in "${HEALTH_URLS[@]}"; do
+            echo "Trying: $url"
+            if curl -f -s --max-time 30 "$url"; then
+              echo "✅ Health check passed for: $url"
+              exit 0
+            else
+              echo "❌ Health check failed for: $url"
+            fi
+          done
+
+          echo "All health checks failed, but deployment may still be successful"
         continue-on-error: true
