@@ -127,8 +127,13 @@ export class NominationRepository {
         { name: '@votingPeriodId', value: votingPeriodId }
       ]
     };
-    
+
     const { resources } = await container.items.query<Nomination>(querySpec).fetchAll();
     return resources.length > 0 ? resources[0] : null;
+  }
+
+  async delete(id: string): Promise<void> {
+    const container = await this.cosmosClient.getContainer(this.containerName);
+    await container.item(id, id).delete();
   }
 }

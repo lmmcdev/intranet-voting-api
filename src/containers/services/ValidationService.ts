@@ -18,7 +18,7 @@ export class ValidationService {
     await this.validateNominationReason(nominationData.reason);
     this.validateCriteria(nominationData.criteria);
     await this.validateDuplicateNomination(nominationData, votingPeriodId);
-    this.validateSelfNomination(nominationData);
+    await this.validateSelfNomination(nominationData);
   }
 
   async validateEmployee(employeeId: string): Promise<void> {
@@ -96,7 +96,7 @@ export class ValidationService {
   async validateSelfNomination(nominationData: CreateNominationDto): Promise<void> {
     const nominatedEmployee = await this.azureEmployeeService.getEmployeeById(nominationData.nominatedEmployeeId);
     if (nominatedEmployee && nominatedEmployee.email === nominationData.nominatorEmail) {
-      throw new Error('Self-nomination is not allowed');
+      throw new Error('No puedes nominarte a ti mismo / Self-nomination is not allowed');
     }
   }
 
