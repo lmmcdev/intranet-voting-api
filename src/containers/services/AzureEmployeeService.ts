@@ -59,7 +59,6 @@ export class AzureEmployeeService {
 
   async getAllActiveEmployees(): Promise<Employee[]> {
     console.log("Fetching all active employees from Azure AD");
-    console.log(`Azure Config ${this.graphClient ? "found:" : "not found"} `);
     // If Azure AD not configured, use mock data
     if (!this.graphClient) {
       console.log("Azure AD not configured, using mock employee data");
@@ -67,50 +66,113 @@ export class AzureEmployeeService {
     }
 
     try {
-      // Get users from Azure AD
-      /*    const users = await this.graphClient
-        .api("/users")
-        .select([
-          "id",
-          "displayName",
-          "mail",
-          "userPrincipalName",
-          "department",
-          "jobTitle",
-          "accountEnabled",
-          "city",
-          "office",
-        ])
-        .filter("accountEnabled eq true")
-        .get(); */
+      const allEmployees: Employee[] = [];
+      let nextPageToken: string | undefined = undefined;
+      let hasMore = true;
 
-      const users = await this.graphClient
-        .api("/users")
-        .select([
-          "id",
-          "displayName",
-          "mail",
-          "userPrincipalName",
-          "department",
-          "jobTitle",
-          "accountEnabled",
-        ])
-        .filter("accountEnabled eq true")
-        .top(1) // Adjust as needed, max 999
-        .get();
+      while (hasMore) {
+        const result: {
+          employees: Employee[];
+          nextPageToken?: string;
+          hasMore: boolean;
+        } = await this.getAllActiveEmployeesPaginated(999, nextPageToken);
+        allEmployees.push(...result.employees);
+        nextPageToken = result.nextPageToken;
+        hasMore = result.hasMore;
 
-      console.log(`Fetched ${users.value.length} users from Azure AD`);
-      console.log(`Users: ${JSON.stringify(users)}`);
-      // Transform Azure users to Employee format
-      return users.value.map((user: AzureUser) =>
-        this.transformAzureUserToEmployee(user)
-      );
+        console.log(`Current total: ${allEmployees.length} employees, hasMore: ${hasMore}`);
+
+        // Safety check to prevent infinite loops
+        if (allEmployees.length > 10000) {
+          console.warn("Reached safety limit of 10000 employees, stopping pagination");
+          break;
+        }
+      }
+
+      console.log(`Fetched ${allEmployees.length} total users from Azure AD`);
+      return allEmployees;
     } catch (error) {
       console.error(
         "Error fetching users from Azure AD, falling back to mock data:",
         error
       );
       return this.getAllActiveEmployeesMock();
+    }
+  }
+
+  async getAllActiveEmployeesPaginated(
+    pageSize: number = 50,
+    skipToken?: string
+  ): Promise<{
+    employees: Employee[];
+    nextPageToken?: string;
+    hasMore: boolean;
+  }> {
+    console.log("Fetching paginated active employees from Azure AD");
+    // If Azure AD not configured, use mock data
+    if (!this.graphClient) {
+      console.log("Azure AD not configured, using mock employee data");
+      const mockEmployees = await this.getAllActiveEmployeesMock();
+      return {
+        employees: mockEmployees,
+        hasMore: false,
+      };
+    }
+
+    try {
+      let query = this.graphClient
+        .api("/users")
+        .select([
+          "id",
+          "displayName",
+          "mail",
+          "userPrincipalName",
+          "department",
+          "jobTitle",
+          "accountEnabled",
+        ])
+        .filter("accountEnabled eq true")
+        .top(pageSize);
+
+      if (skipToken) {
+        query = query.skipToken(skipToken);
+      }
+
+      const users = await query.get();
+
+      console.log(`Fetched ${users.value.length} users from Azure AD`);
+      console.log(`Has @odata.nextLink: ${!!users["@odata.nextLink"]}`);
+      if (users["@odata.nextLink"]) {
+        console.log(`Next link: ${users["@odata.nextLink"]}`);
+      }
+
+      const employees = users.value.map((user: AzureUser) =>
+        this.transformAzureUserToEmployee(user)
+      );
+
+      const nextPageToken = users["@odata.nextLink"]
+        ? new URLSearchParams(new URL(users["@odata.nextLink"]).search).get(
+            "$skiptoken"
+          ) || undefined
+        : undefined;
+
+      console.log(`Next page token: ${nextPageToken}`);
+
+      return {
+        employees,
+        nextPageToken,
+        hasMore: !!nextPageToken,
+      };
+    } catch (error) {
+      console.error(
+        "Error fetching users from Azure AD, falling back to mock data:",
+        error
+      );
+      const mockEmployees = await this.getAllActiveEmployeesMock();
+      return {
+        employees: mockEmployees,
+        hasMore: false,
+      };
     }
   }
 
@@ -145,6 +207,65 @@ export class AzureEmployeeService {
       const mockEmployees = await this.getAllActiveEmployeesMock();
       return mockEmployees.find((emp) => emp.id === id) || null;
     }
+  }
+
+  async searchEmployees(query: string, limit: number = 10): Promise<Employee[]> {
+    console.log(`Searching employees with query: "${query}", limit: ${limit}`);
+
+    // If Azure AD not configured, search in mock data
+    if (!this.graphClient) {
+      console.log("Azure AD not configured, searching mock employee data");
+      const mockEmployees = await this.getAllActiveEmployeesMock();
+      return this.filterAndSortEmployees(mockEmployees, query, limit);
+    }
+
+    try {
+      // Get all employees first, then filter client-side for better flexibility
+      console.log("Getting all employees to perform client-side search");
+      const allEmployees = await this.getAllActiveEmployees();
+
+      console.log(`Searching through ${allEmployees.length} employees for "${query}"`);
+
+      // Filter and sort client-side with flexible matching
+      return this.filterAndSortEmployees(allEmployees, query, limit);
+    } catch (error) {
+      console.error("Error searching users from Azure AD, falling back to mock data:", error);
+      const mockEmployees = await this.getAllActiveEmployeesMock();
+      return this.filterAndSortEmployees(mockEmployees, query, limit);
+    }
+  }
+
+  private filterAndSortEmployees(employees: Employee[], query: string, limit: number): Employee[] {
+    const lowerQuery = query.toLowerCase();
+
+    // Score employees based on match quality
+    const scoredEmployees = employees.map(emp => {
+      let score = 0;
+      const lowerName = emp.name.toLowerCase();
+      const lowerEmail = emp.email.toLowerCase();
+      const lowerDept = emp.department.toLowerCase();
+      const lowerPos = emp.position.toLowerCase();
+
+      // Prioritize exact name matches
+      if (lowerName === lowerQuery) score += 1000;
+      else if (lowerName.startsWith(lowerQuery)) score += 500;
+      else if (lowerName.includes(lowerQuery)) score += 100;
+
+      // Email matches
+      if (lowerEmail.startsWith(lowerQuery)) score += 300;
+      else if (lowerEmail.includes(lowerQuery)) score += 50;
+
+      // Department and position matches
+      if (lowerDept.includes(lowerQuery)) score += 25;
+      if (lowerPos.includes(lowerQuery)) score += 25;
+
+      return { employee: emp, score };
+    })
+    .filter(item => item.score > 0)
+    .sort((a, b) => b.score - a.score || a.employee.name.localeCompare(b.employee.name))
+    .slice(0, limit);
+
+    return scoredEmployees.map(item => item.employee);
   }
 
   async getEmployeeByEmail(email: string): Promise<Employee | null> {
