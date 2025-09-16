@@ -32,7 +32,7 @@ export async function createNomination(
     // Use the authenticated user's email as the nominator
     const nominationData = {
       ...body,
-      nominatorEmail: user.email
+      nominatorEmail: user.email,
     };
 
     if (!nominationData.nominatedEmployeeId || !nominationData.reason) {
@@ -58,7 +58,7 @@ export async function createNomination(
 
 app.http("create-nomination", {
   methods: ["POST"],
-  authLevel: "function",
+  authLevel: "anonymous",
   route: "nominations",
   handler: createNomination,
 });

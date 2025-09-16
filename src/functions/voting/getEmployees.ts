@@ -26,11 +26,13 @@ export async function getEmployees(
     const user = authResult.user;
 
     const { azureEmployeeService } = await getDependencies();
-    
+
     // AzureEmployeeService automatically handles fallback to mock data
     const employees = await azureEmployeeService.getAllActiveEmployees();
 
-    context.log(`User ${user.email} retrieved ${employees.length} active employees`);
+    context.log(
+      `User ${user.email} retrieved ${employees.length} active employees`
+    );
     return ResponseHelper.ok(employees);
   } catch (error) {
     context.error("Error retrieving employees:", error);
@@ -40,7 +42,7 @@ export async function getEmployees(
 
 app.http("get-employees", {
   methods: ["GET"],
-  authLevel: "function",
+  authLevel: "anonymous",
   route: "employees",
   handler: getEmployees,
 });

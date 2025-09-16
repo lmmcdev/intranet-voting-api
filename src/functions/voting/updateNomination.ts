@@ -36,9 +36,15 @@ export async function updateNomination(
       );
     }
 
-    const updatedNomination = await votingService.updateNomination(user.email, body);
+    const updatedNomination = await votingService.updateNomination(
+      user.email,
+      body
+    );
 
-    context.log(`User ${user.email} updated their nomination:`, updatedNomination.id);
+    context.log(
+      `User ${user.email} updated their nomination:`,
+      updatedNomination.id
+    );
     return ResponseHelper.ok(updatedNomination);
   } catch (error) {
     context.error("Error updating nomination:", error);
@@ -53,7 +59,7 @@ export async function updateNomination(
 
 app.http("update-nomination", {
   methods: ["PUT"],
-  authLevel: "function",
+  authLevel: "anonymous",
   route: "nominations/update",
   handler: updateNomination,
 });

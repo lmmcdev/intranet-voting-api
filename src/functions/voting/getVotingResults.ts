@@ -34,7 +34,9 @@ export async function getVotingResults(
 
     const results = await votingService.getVotingResults(votingPeriodId);
 
-    context.log(`User ${user.email} retrieved results for voting period: ${votingPeriodId}`);
+    context.log(
+      `User ${user.email} retrieved results for voting period: ${votingPeriodId}`
+    );
     return ResponseHelper.ok(results);
   } catch (error) {
     context.error("Error retrieving voting results:", error);
@@ -49,7 +51,7 @@ export async function getVotingResults(
 
 app.http("get-voting-results", {
   methods: ["GET"],
-  authLevel: "function",
+  authLevel: "anonymous",
   route: "voting/results/{id}",
   handler: getVotingResults,
 });

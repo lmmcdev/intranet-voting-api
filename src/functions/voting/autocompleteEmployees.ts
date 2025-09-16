@@ -31,7 +31,9 @@ export async function autocompleteEmployees(
     }
 
     if (query.trim().length < 2) {
-      return ResponseHelper.badRequest("Query must be at least 2 characters long");
+      return ResponseHelper.badRequest(
+        "Query must be at least 2 characters long"
+      );
     }
 
     const limit = parseInt(request.query.get("limit") || "10");
@@ -41,9 +43,14 @@ export async function autocompleteEmployees(
 
     const { azureEmployeeService } = await getDependencies();
 
-    const results = await azureEmployeeService.searchEmployees(query.trim(), limit);
+    const results = await azureEmployeeService.searchEmployees(
+      query.trim(),
+      limit
+    );
 
-    context.log(`User ${user.email} searched for "${query}" and got ${results.length} results`);
+    context.log(
+      `User ${user.email} searched for "${query}" and got ${results.length} results`
+    );
     return ResponseHelper.ok(results);
   } catch (error) {
     context.error("Error searching employees:", error);
@@ -53,7 +60,7 @@ export async function autocompleteEmployees(
 
 app.http("autocomplete-employees", {
   methods: ["GET"],
-  authLevel: "function",
+  authLevel: "anonymous",
   route: "employees/search",
   handler: autocompleteEmployees,
 });

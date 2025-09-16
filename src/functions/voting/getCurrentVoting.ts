@@ -52,7 +52,7 @@ export async function getCurrentVoting(
 
 app.http("get-current-voting", {
   methods: ["GET"],
-  authLevel: "function",
+  authLevel: "anonymous",
   route: "voting/current",
   handler: getCurrentVoting,
 });
