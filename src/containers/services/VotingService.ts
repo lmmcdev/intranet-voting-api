@@ -111,14 +111,6 @@ export class VotingService {
     console.log(
       `Total Employees: ${totalEmployees}, Total Votes: ${totalVotes}, Total Nominations: ${totalNominations}`
     );
-    /*  const averageVotes: number =
-      totalEmployees > 0 ? totalNominations / totalEmployees : 0;
-
-    const averagePercentLabel = new Intl.NumberFormat("es-ES", {
-      style: "percent",
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(averageVotes); */
 
     const averageRate =
       totalEmployees > 0 ? totalNominations / totalEmployees : 0;
