@@ -1,4 +1,4 @@
-import { Criteria } from './Nomination';
+import { Criteria } from "./Nomination";
 
 export interface VoteResult {
   votingPeriodId: string;
@@ -20,6 +20,7 @@ export interface VotingPeriodResults {
     status: string;
   };
   totalNominations: number;
+  averagePercentLabel: string;
   results: VoteResult[];
   winner?: VoteResult;
 }

@@ -1,10 +1,16 @@
-import { Nomination, CreateNominationDto, UpdateNominationDto, NominationWithEmployee, Criteria } from '../models/Nomination';
-import { VotingPeriod, VotingPeriodStatus } from '../models/VotingPeriod';
-import { VoteResult, VotingPeriodResults } from '../models/VoteResult';
-import { NominationRepository } from '../repositories/NominationRepository';
-import { VotingPeriodRepository } from '../repositories/VotingPeriodRepository';
-import { AzureEmployeeService } from './AzureEmployeeService';
-import { ValidationService } from './ValidationService';
+import {
+  Nomination,
+  CreateNominationDto,
+  UpdateNominationDto,
+  NominationWithEmployee,
+  Criteria,
+} from "../models/Nomination";
+import { VotingPeriod, VotingPeriodStatus } from "../models/VotingPeriod";
+import { VoteResult, VotingPeriodResults } from "../models/VoteResult";
+import { NominationRepository } from "../repositories/NominationRepository";
+import { VotingPeriodRepository } from "../repositories/VotingPeriodRepository";
+import { AzureEmployeeService } from "./AzureEmployeeService";
+import { ValidationService } from "./ValidationService";
 
 export class VotingService {
   private nominationRepository: NominationRepository;
@@ -24,19 +30,24 @@ export class VotingService {
     this.validationService = validationService;
   }
 
-  async createNomination(nominationData: CreateNominationDto): Promise<Nomination> {
+  async createNomination(
+    nominationData: CreateNominationDto
+  ): Promise<Nomination> {
     const currentPeriod = await this.getCurrentVotingPeriod();
     if (!currentPeriod) {
-      throw new Error('No active voting period found');
+      throw new Error("No active voting period found");
     }
 
-    await this.validationService.validateNomination(nominationData, currentPeriod.id);
+    await this.validationService.validateNomination(
+      nominationData,
+      currentPeriod.id
+    );
 
     const nomination: Nomination = {
       id: this.generateId(),
       ...nominationData,
       votingPeriodId: currentPeriod.id,
-      createdAt: new Date()
+      createdAt: new Date(),
     };
 
     return await this.nominationRepository.create(nomination);
@@ -52,49 +63,78 @@ export class VotingService {
       return [];
     }
 
-    const nominations = await this.nominationRepository.findByVotingPeriod(currentPeriod.id);
+    const nominations = await this.nominationRepository.findByVotingPeriod(
+      currentPeriod.id
+    );
 
     const nominationsWithEmployee: NominationWithEmployee[] = [];
 
     for (const nomination of nominations) {
-      const employee = await this.azureEmployeeService.getEmployeeById(nomination.nominatedEmployeeId);
+      const employee = await this.azureEmployeeService.getEmployeeById(
+        nomination.nominatedEmployeeId
+      );
 
       nominationsWithEmployee.push({
         ...nomination,
         nominatedEmployee: {
-          name: employee?.name || 'Unknown Employee',
-          department: employee?.department || 'Unknown',
-          position: employee?.position || 'Unknown'
-        }
+          name: employee?.name || "Unknown Employee",
+          department: employee?.department || "Unknown",
+          position: employee?.position || "Unknown",
+        },
       });
     }
 
     return nominationsWithEmployee;
   }
 
+  async getAllVotingPeriods(): Promise<VotingPeriod[]> {
+    return await this.votingPeriodRepository.findRecentPeriods();
+  }
+
   async getVotingResults(votingPeriodId: string): Promise<VotingPeriodResults> {
-    const votingPeriod = await this.votingPeriodRepository.findById(votingPeriodId);
+    const votingPeriod = await this.votingPeriodRepository.findById(
+      votingPeriodId
+    );
     if (!votingPeriod) {
-      throw new Error('Voting period not found');
+      throw new Error("Voting period not found");
     }
 
-    const nominations = await this.nominationRepository.findByVotingPeriod(votingPeriodId);
+    const nominations = await this.nominationRepository.findByVotingPeriod(
+      votingPeriodId
+    );
     const employeeVotes = this.aggregateVotes(nominations);
     const totalNominations = nominations.length;
+    const totalVotes = employeeVotes.reduce((sum, vote) => sum + vote.count, 0);
+
+    const totalEmployees = await this.azureEmployeeService.getEmployeeCount();
+
+    console.log(
+      `Total Employees: ${totalEmployees}, Total Votes: ${totalVotes}, Total Nominations: ${totalNominations}`
+    );
+    const averageVotes: number =
+      totalEmployees > 0 ? totalNominations / totalEmployees : 0;
+
+    const averagePercentLabel = new Intl.NumberFormat("es-ES", {
+      style: "percent",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(averageVotes);
 
     const results: VoteResult[] = await Promise.all(
       employeeVotes.map(async (vote, index) => {
-        const employee = await this.azureEmployeeService.getEmployeeById(vote.employeeId);
+        const employee = await this.azureEmployeeService.getEmployeeById(
+          vote.employeeId
+        );
         return {
           votingPeriodId,
           employeeId: vote.employeeId,
-          employeeName: employee?.name || 'Unknown',
-          department: employee?.department || 'Unknown',
-          position: employee?.position || 'Unknown',
+          employeeName: employee?.name || "Unknown",
+          department: employee?.department || "Unknown",
+          position: employee?.position || "Unknown",
           nominationCount: vote.count,
           percentage: (vote.count / totalNominations) * 100,
           rank: index + 1,
-          averageCriteria: vote.averageCriteria
+          averageCriteria: vote.averageCriteria,
         };
       })
     );
@@ -104,18 +144,24 @@ export class VotingService {
         id: votingPeriod.id,
         year: votingPeriod.year,
         month: votingPeriod.month,
-        status: votingPeriod.status
+        status: votingPeriod.status,
       },
       totalNominations,
+      averagePercentLabel,
       results,
-      winner: results[0]
+      winner: results[0],
     };
   }
 
-  private aggregateVotes(nominations: Nomination[]): { employeeId: string; count: number; averageCriteria: Criteria }[] {
-    const voteMap = new Map<string, { count: number, totalCriteria: Criteria }>();
+  private aggregateVotes(
+    nominations: Nomination[]
+  ): { employeeId: string; count: number; averageCriteria: Criteria }[] {
+    const voteMap = new Map<
+      string,
+      { count: number; totalCriteria: Criteria }
+    >();
 
-    nominations.forEach(nomination => {
+    nominations.forEach((nomination) => {
       const current = voteMap.get(nomination.nominatedEmployeeId) || {
         count: 0,
         totalCriteria: {
@@ -124,20 +170,28 @@ export class VotingService {
           leadership: 0,
           problemSolving: 0,
           reliability: 0,
-          teamwork: 0
-        }
+          teamwork: 0,
+        },
       };
 
       voteMap.set(nomination.nominatedEmployeeId, {
         count: current.count + 1,
         totalCriteria: {
-          communication: current.totalCriteria.communication + nomination.criteria.communication,
-          innovation: current.totalCriteria.innovation + nomination.criteria.innovation,
-          leadership: current.totalCriteria.leadership + nomination.criteria.leadership,
-          problemSolving: current.totalCriteria.problemSolving + nomination.criteria.problemSolving,
-          reliability: current.totalCriteria.reliability + nomination.criteria.reliability,
-          teamwork: current.totalCriteria.teamwork + nomination.criteria.teamwork
-        }
+          communication:
+            current.totalCriteria.communication +
+            nomination.criteria.communication,
+          innovation:
+            current.totalCriteria.innovation + nomination.criteria.innovation,
+          leadership:
+            current.totalCriteria.leadership + nomination.criteria.leadership,
+          problemSolving:
+            current.totalCriteria.problemSolving +
+            nomination.criteria.problemSolving,
+          reliability:
+            current.totalCriteria.reliability + nomination.criteria.reliability,
+          teamwork:
+            current.totalCriteria.teamwork + nomination.criteria.teamwork,
+        },
       });
     });
 
@@ -146,39 +200,56 @@ export class VotingService {
         employeeId,
         count: data.count,
         averageCriteria: {
-          communication: Math.round((data.totalCriteria.communication / data.count) * 10) / 10,
-          innovation: Math.round((data.totalCriteria.innovation / data.count) * 10) / 10,
-          leadership: Math.round((data.totalCriteria.leadership / data.count) * 10) / 10,
-          problemSolving: Math.round((data.totalCriteria.problemSolving / data.count) * 10) / 10,
-          reliability: Math.round((data.totalCriteria.reliability / data.count) * 10) / 10,
-          teamwork: Math.round((data.totalCriteria.teamwork / data.count) * 10) / 10
-        }
+          communication:
+            Math.round((data.totalCriteria.communication / data.count) * 10) /
+            10,
+          innovation:
+            Math.round((data.totalCriteria.innovation / data.count) * 10) / 10,
+          leadership:
+            Math.round((data.totalCriteria.leadership / data.count) * 10) / 10,
+          problemSolving:
+            Math.round((data.totalCriteria.problemSolving / data.count) * 10) /
+            10,
+          reliability:
+            Math.round((data.totalCriteria.reliability / data.count) * 10) / 10,
+          teamwork:
+            Math.round((data.totalCriteria.teamwork / data.count) * 10) / 10,
+        },
       }))
       .sort((a, b) => b.count - a.count);
   }
 
-  async updateNomination(nominatorEmail: string, updateData: UpdateNominationDto): Promise<Nomination> {
+  async updateNomination(
+    nominatorEmail: string,
+    updateData: UpdateNominationDto
+  ): Promise<Nomination> {
     const currentPeriod = await this.getCurrentVotingPeriod();
     if (!currentPeriod) {
-      throw new Error('No active voting period found');
+      throw new Error("No active voting period found");
     }
 
     // Find existing nomination by nominator email and current voting period
-    const existingNomination = await this.nominationRepository.findByNominatorEmail(nominatorEmail, currentPeriod.id);
+    const existingNomination =
+      await this.nominationRepository.findByNominatorEmail(
+        nominatorEmail,
+        currentPeriod.id
+      );
     if (!existingNomination) {
-      throw new Error('No existing nomination found to update');
+      throw new Error("No existing nomination found to update");
     }
 
     // Validate the updated data if provided
     if (updateData.nominatedEmployeeId) {
-      await this.validationService.validateEmployee(updateData.nominatedEmployeeId);
-      
+      await this.validationService.validateEmployee(
+        updateData.nominatedEmployeeId
+      );
+
       // Check for self-nomination
       const updateNominationData: CreateNominationDto = {
         nominatedEmployeeId: updateData.nominatedEmployeeId,
         nominatorEmail: nominatorEmail,
         reason: updateData.reason || existingNomination.reason,
-        criteria: updateData.criteria || existingNomination.criteria
+        criteria: updateData.criteria || existingNomination.criteria,
       };
       await this.validationService.validateSelfNomination(updateNominationData);
     }
@@ -194,13 +265,18 @@ export class VotingService {
     // Update the nomination
     const updatedNomination: Nomination = {
       ...existingNomination,
-      nominatedEmployeeId: updateData.nominatedEmployeeId || existingNomination.nominatedEmployeeId,
+      nominatedEmployeeId:
+        updateData.nominatedEmployeeId ||
+        existingNomination.nominatedEmployeeId,
       reason: updateData.reason || existingNomination.reason,
       criteria: updateData.criteria || existingNomination.criteria,
-      updatedAt: new Date()
+      updatedAt: new Date(),
     };
 
-    return await this.nominationRepository.update(existingNomination.id, updatedNomination);
+    return await this.nominationRepository.update(
+      existingNomination.id,
+      updatedNomination
+    );
   }
 
   private generateId(): string {

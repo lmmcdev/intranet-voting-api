@@ -1,368 +1,482 @@
 {
-	"info": {
-		"_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-		"name": "Employee of Month API",
-		"description": "API collection for the Employee of the Month voting system",
-		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-		"_exporter_id": "12345678"
-	},
-	"item": [
-		{
-			"name": "Health Check",
-			"item": [
-				{
-					"name": "Get Health Status",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{baseUrl}}/api/health",
-							"host": [
-								"{{baseUrl}}"
-							],
-							"path": [
-								"api",
-								"health"
-							]
-						},
-						"description": "Check if the API is running and healthy"
-					},
-					"response": [
-						{
-							"name": "Health Check Success",
-							"originalRequest": {
-								"method": "GET",
-								"header": [],
-								"url": {
-									"raw": "{{baseUrl}}/api/health",
-									"host": [
-										"{{baseUrl}}"
-									],
-									"path": [
-										"api",
-										"health"
-									]
-								}
-							},
-							"status": "OK",
-							"code": 200,
-							"_postman_previewlanguage": "json",
-							"header": [
-								{
-									"key": "Content-Type",
-									"value": "application/json"
-								}
-							],
-							"cookie": [],
-							"body": "{\n    \"status\": \"ok\"\n}"
-						}
-					]
-				}
-			],
-			"description": "Health check endpoints"
-		},
-		{
-			"name": "Employees",
-			"item": [
-				{
-					"name": "Get All Employees",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{baseUrl}}/api/employees",
-							"host": [
-								"{{baseUrl}}"
-							],
-							"path": [
-								"api",
-								"employees"
-							]
-						},
-						"description": "Retrieve all active employees in the system"
-					},
-					"response": [
-						{
-							"name": "Get Employees Success",
-							"originalRequest": {
-								"method": "GET",
-								"header": [],
-								"url": {
-									"raw": "{{baseUrl}}/api/employees",
-									"host": [
-										"{{baseUrl}}"
-									],
-									"path": [
-										"api",
-										"employees"
-									]
-								}
-							},
-							"status": "OK",
-							"code": 200,
-							"_postman_previewlanguage": "json",
-							"header": [
-								{
-									"key": "Content-Type",
-									"value": "application/json"
-								}
-							],
-							"cookie": [],
-							"body": "[\n    {\n        \"id\": \"emp-001\",\n        \"name\": \"John Doe\",\n        \"email\": \"john.doe@company.com\",\n        \"department\": \"Engineering\",\n        \"position\": \"Senior Developer\",\n        \"isActive\": true,\n        \"createdAt\": \"2023-01-15T10:30:00Z\",\n        \"updatedAt\": \"2023-01-15T10:30:00Z\"\n    }\n]"
-						}
-					]
-				}
-			],
-			"description": "Employee management endpoints"
-		},
-		{
-			"name": "Voting",
-			"item": [
-				{
-					"name": "Get Current Voting Period",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{baseUrl}}/api/voting/current",
-							"host": [
-								"{{baseUrl}}"
-							],
-							"path": [
-								"api",
-								"voting",
-								"current"
-							]
-						},
-						"description": "Get the current active voting period with nominations"
-					},
-					"response": [
-						{
-							"name": "Current Voting Success",
-							"originalRequest": {
-								"method": "GET",
-								"header": [],
-								"url": {
-									"raw": "{{baseUrl}}/api/voting/current",
-									"host": [
-										"{{baseUrl}}"
-									],
-									"path": [
-										"api",
-										"voting",
-										"current"
-									]
-								}
-							},
-							"status": "OK",
-							"code": 200,
-							"_postman_previewlanguage": "json",
-							"header": [
-								{
-									"key": "Content-Type",
-									"value": "application/json"
-								}
-							],
-							"cookie": [],
-							"body": "{\n    \"votingPeriod\": {\n        \"id\": \"vp-202309\",\n        \"year\": 2023,\n        \"month\": 9,\n        \"startDate\": \"2023-09-01T00:00:00Z\",\n        \"endDate\": \"2023-09-30T23:59:59Z\",\n        \"status\": \"ACTIVE\"\n    },\n    \"nominations\": [\n        {\n            \"id\": \"nom-001\",\n            \"nominatedEmployeeId\": \"emp-001\",\n            \"nominatorEmail\": \"manager@company.com\",\n            \"reason\": \"Outstanding performance on the project\",\n            \"createdAt\": \"2023-09-05T14:30:00Z\"\n        }\n    ],\n    \"totalNominations\": 1\n}"
-						}
-					]
-				},
-				{
-					"name": "Get Voting Results",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{baseUrl}}/api/voting/results/{{votingPeriodId}}",
-							"host": [
-								"{{baseUrl}}"
-							],
-							"path": [
-								"api",
-								"voting",
-								"results",
-								"{{votingPeriodId}}"
-							]
-						},
-						"description": "Get voting results for a specific voting period"
-					},
-					"response": [
-						{
-							"name": "Voting Results Success",
-							"originalRequest": {
-								"method": "GET",
-								"header": [],
-								"url": {
-									"raw": "{{baseUrl}}/api/voting/results/vp-202309",
-									"host": [
-										"{{baseUrl}}"
-									],
-									"path": [
-										"api",
-										"voting",
-										"results",
-										"vp-202309"
-									]
-								}
-							},
-							"status": "OK",
-							"code": 200,
-							"_postman_previewlanguage": "json",
-							"header": [
-								{
-									"key": "Content-Type",
-									"value": "application/json"
-								}
-							],
-							"cookie": [],
-							"body": "{\n    \"votingPeriodId\": \"vp-202309\",\n    \"results\": [\n        {\n            \"employeeId\": \"emp-001\",\n            \"employeeName\": \"John Doe\",\n            \"nominations\": 5,\n            \"rank\": 1\n        }\n    ],\n    \"winner\": {\n        \"employeeId\": \"emp-001\",\n        \"employeeName\": \"John Doe\",\n        \"nominations\": 5\n    },\n    \"totalNominations\": 5\n}"
-						}
-					]
-				}
-			],
-			"description": "Voting period and results endpoints"
-		},
-		{
-			"name": "Nominations",
-			"item": [
-				{
-					"name": "Create Nomination",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"nominatedEmployeeId\": \"emp-001\",\n    \"nominatorEmail\": \"manager@company.com\",\n    \"reason\": \"Outstanding performance on the Q3 project delivery. Showed exceptional leadership and technical skills.\"\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/api/nominations",
-							"host": [
-								"{{baseUrl}}"
-							],
-							"path": [
-								"api",
-								"nominations"
-							]
-						},
-						"description": "Create a new nomination for the current voting period"
-					},
-					"response": [
-						{
-							"name": "Create Nomination Success",
-							"originalRequest": {
-								"method": "POST",
-								"header": [
-									{
-										"key": "Content-Type",
-										"value": "application/json"
-									}
-								],
-								"body": {
-									"mode": "raw",
-									"raw": "{\n    \"nominatedEmployeeId\": \"emp-001\",\n    \"nominatorEmail\": \"manager@company.com\",\n    \"reason\": \"Outstanding performance on the Q3 project delivery.\"\n}"
-								},
-								"url": {
-									"raw": "{{baseUrl}}/api/nominations",
-									"host": [
-										"{{baseUrl}}"
-									],
-									"path": [
-										"api",
-										"nominations"
-									]
-								}
-							},
-							"status": "Created",
-							"code": 201,
-							"_postman_previewlanguage": "json",
-							"header": [
-								{
-									"key": "Content-Type",
-									"value": "application/json"
-								}
-							],
-							"cookie": [],
-							"body": "{\n    \"id\": \"nom-001\",\n    \"nominatedEmployeeId\": \"emp-001\",\n    \"nominatorEmail\": \"manager@company.com\",\n    \"votingPeriodId\": \"vp-202309\",\n    \"reason\": \"Outstanding performance on the Q3 project delivery.\",\n    \"createdAt\": \"2023-09-15T14:30:00Z\"\n}"
-						},
-						{
-							"name": "Create Nomination - Missing Fields",
-							"originalRequest": {
-								"method": "POST",
-								"header": [
-									{
-										"key": "Content-Type",
-										"value": "application/json"
-									}
-								],
-								"body": {
-									"mode": "raw",
-									"raw": "{\n    \"nominatedEmployeeId\": \"emp-001\"\n}"
-								},
-								"url": {
-									"raw": "{{baseUrl}}/api/nominations",
-									"host": [
-										"{{baseUrl}}"
-									],
-									"path": [
-										"api",
-										"nominations"
-									]
-								}
-							},
-							"status": "Bad Request",
-							"code": 400,
-							"_postman_previewlanguage": "json",
-							"header": [
-								{
-									"key": "Content-Type",
-									"value": "application/json"
-								}
-							],
-							"cookie": [],
-							"body": "{\n    \"error\": \"Missing required fields: nominatedEmployeeId, nominatorEmail, reason\"\n}"
-						}
-					]
-				}
-			],
-			"description": "Nomination management endpoints"
-		}
-	],
-	"event": [
-		{
-			"listen": "prerequest",
-			"script": {
-				"type": "text/javascript",
-				"exec": [
-					""
-				]
-			}
-		},
-		{
-			"listen": "test",
-			"script": {
-				"type": "text/javascript",
-				"exec": [
-					""
-				]
-			}
-		}
-	],
-	"variable": [
-		{
-			"key": "baseUrl",
-			"value": "http://localhost:7071",
-			"description": "Base URL for the Employee of Month API - Local development"
-		},
-		{
-			"key": "votingPeriodId",
-			"value": "vp-202309",
-			"description": "Sample voting period ID for testing"
-		}
-	]
+  "info": {
+    "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "name": "Intranet Voting API",
+    "description": "API collection for the Employee of the Month voting system with criteria scoring",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "12345678"
+  },
+  "item": [
+    {
+      "name": "Health Check",
+      "item": [
+        {
+          "name": "Get Health Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{intranet_base_url}}/api/health",
+              "host": ["{{intranet_base_url}}"],
+              "path": ["api", "health"]
+            },
+            "description": "Check if the API is running and healthy"
+          }
+        }
+      ],
+      "description": "Health check endpoints"
+    },
+    {
+      "name": "Employees",
+      "item": [
+        {
+          "name": "Get All Employees",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{intranet_base_url}}/api/employees",
+              "host": ["{{intranet_base_url}}"],
+              "path": ["api", "employees"]
+            },
+            "description": "Retrieve all active employees from Azure AD"
+          }
+        },
+        {
+          "name": "Get Employee by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{intranet_base_url}}/api/employees/{{employeeId}}",
+              "host": ["{{intranet_base_url}}"],
+              "path": ["api", "employees", "{{employeeId}}"]
+            },
+            "description": "Get specific employee details by ID from Azure AD"
+          }
+        },
+        {
+          "name": "Autocomplete Employees",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{intranet_base_url}}/api/employees/autocomplete?q={{searchQuery}}&limit=10",
+              "host": ["{{intranet_base_url}}"],
+              "path": ["api", "employees", "autocomplete"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "{{searchQuery}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Search employees for autocomplete functionality"
+          }
+        }
+      ],
+      "description": "Employee management endpoints"
+    },
+    {
+      "name": "Voting",
+      "item": [
+        {
+          "name": "Get Current Voting Period",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{intranet_base_url}}/api/voting/current",
+              "host": ["{{intranet_base_url}}"],
+              "path": ["api", "voting", "current"]
+            },
+            "description": "Get the current active voting period with nominations"
+          }
+        },
+        {
+          "name": "Get All Voting Periods",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{intranet_base_url}}/api/voting/all",
+              "host": ["{{intranet_base_url}}"],
+              "path": ["api", "voting", "all"]
+            },
+            "description": "Get all voting periods ordered by most recent first"
+          }
+        },
+        {
+          "name": "Get Voting Results",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{intranet_base_url}}/api/voting/results/{{votingPeriodId}}",
+              "host": ["{{intranet_base_url}}"],
+              "path": ["api", "voting", "results", "{{votingPeriodId}}"]
+            },
+            "description": "Get voting results with criteria averages for a specific voting period"
+          },
+          "response": [
+            {
+              "name": "Voting Results with Criteria",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{intranet_base_url}}/api/voting/results/vp-2025-09",
+                  "host": ["{{intranet_base_url}}"],
+                  "path": ["api", "voting", "results", "vp-2025-09"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"votingPeriod\": {\n        \"id\": \"vp-2025-09\",\n        \"year\": 2025,\n        \"month\": 9,\n        \"status\": \"ACTIVE\"\n    },\n    \"totalNominations\": 3,\n    \"results\": [\n        {\n            \"votingPeriodId\": \"vp-2025-09\",\n            \"employeeId\": \"emp-001\",\n            \"employeeName\": \"John Doe\",\n            \"department\": \"Engineering\",\n            \"position\": \"Senior Developer\",\n            \"nominationCount\": 3,\n            \"percentage\": 100,\n            \"rank\": 1,\n            \"averageCriteria\": {\n                \"communication\": 4.7,\n                \"innovation\": 3.3,\n                \"leadership\": 4.8,\n                \"problemSolving\": 4.5,\n                \"reliability\": 4.9,\n                \"teamwork\": 4.6\n            }\n        }\n    ],\n    \"winner\": {\n        \"votingPeriodId\": \"vp-2025-09\",\n        \"employeeId\": \"emp-001\",\n        \"employeeName\": \"John Doe\",\n        \"department\": \"Engineering\",\n        \"position\": \"Senior Developer\",\n        \"nominationCount\": 3,\n        \"percentage\": 100,\n        \"rank\": 1,\n        \"averageCriteria\": {\n            \"communication\": 4.7,\n            \"innovation\": 3.3,\n            \"leadership\": 4.8,\n            \"problemSolving\": 4.5,\n            \"reliability\": 4.9,\n            \"teamwork\": 4.6\n        }\n    }\n}"
+            }
+          ]
+        }
+      ],
+      "description": "Voting period and results endpoints"
+    },
+    {
+      "name": "Nominations",
+      "item": [
+        {
+          "name": "Create Nomination",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"nominatedEmployeeId\": \"{{employeeId}}\",\n    \"reason\": \"Outstanding leadership and innovation during Q3 project delivery. Consistently demonstrates excellence in all areas.\",\n    \"criteria\": {\n        \"communication\": 5,\n        \"innovation\": 3,\n        \"leadership\": 5,\n        \"problemSolving\": 5,\n        \"reliability\": 5,\n        \"teamwork\": 5\n    }\n}"
+            },
+            "url": {
+              "raw": "{{intranet_base_url}}/api/nominations",
+              "host": ["{{intranet_base_url}}"],
+              "path": ["api", "nominations"]
+            },
+            "description": "Create a new nomination with criteria scoring for the current voting period"
+          },
+          "response": [
+            {
+              "name": "Create Nomination Success",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"nominatedEmployeeId\": \"emp-001\",\n    \"reason\": \"Outstanding performance\",\n    \"criteria\": {\n        \"communication\": 5,\n        \"innovation\": 3,\n        \"leadership\": 5,\n        \"problemSolving\": 5,\n        \"reliability\": 5,\n        \"teamwork\": 5\n    }\n}"
+                },
+                "url": {
+                  "raw": "{{intranet_base_url}}/api/nominations",
+                  "host": ["{{intranet_base_url}}"],
+                  "path": ["api", "nominations"]
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"id\": \"nom-001\",\n    \"nominatedEmployeeId\": \"emp-001\",\n    \"nominatorEmail\": \"user@company.com\",\n    \"votingPeriodId\": \"vp-2025-09\",\n    \"reason\": \"Outstanding performance\",\n    \"criteria\": {\n        \"communication\": 5,\n        \"innovation\": 3,\n        \"leadership\": 5,\n        \"problemSolving\": 5,\n        \"reliability\": 5,\n        \"teamwork\": 5\n    },\n    \"createdAt\": \"2025-09-16T14:30:00Z\"\n}"
+            },
+            {
+              "name": "Self-Nomination Error",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"nominatedEmployeeId\": \"self-employee-id\",\n    \"reason\": \"Trying to nominate myself\",\n    \"criteria\": {\n        \"communication\": 5,\n        \"innovation\": 5,\n        \"leadership\": 5,\n        \"problemSolving\": 5,\n        \"reliability\": 5,\n        \"teamwork\": 5\n    }\n}"
+                },
+                "url": {
+                  "raw": "{{intranet_base_url}}/api/nominations",
+                  "host": ["{{intranet_base_url}}"],
+                  "path": ["api", "nominations"]
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"error\": \"No puedes nominarte a ti mismo / Self-nomination is not allowed\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get My Nomination",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{intranet_base_url}}/api/nominations/my",
+              "host": ["{{intranet_base_url}}"],
+              "path": ["api", "nominations", "my"]
+            },
+            "description": "Get the current user's nomination for the active voting period"
+          },
+          "response": [
+            {
+              "name": "Get Nomination Success",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{intranet_base_url}}/api/nominations/my",
+                  "host": ["{{intranet_base_url}}"],
+                  "path": ["api", "nominations", "my"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"id\": \"nom-001\",\n    \"nominatedEmployeeId\": \"emp-001\",\n    \"nominatorEmail\": \"user@company.com\",\n    \"votingPeriodId\": \"vp-2025-09\",\n    \"reason\": \"Outstanding leadership and innovation\",\n    \"criteria\": {\n        \"communication\": 5,\n        \"innovation\": 3,\n        \"leadership\": 5,\n        \"problemSolving\": 5,\n        \"reliability\": 5,\n        \"teamwork\": 5\n    },\n    \"createdAt\": \"2025-09-16T10:30:00Z\",\n    \"nominatedEmployee\": {\n        \"name\": \"John Doe\",\n        \"department\": \"Engineering\",\n        \"position\": \"Senior Developer\"\n    }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Nomination",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"reason\": \"Updated: Exceptional leadership during the crisis and innovative solutions that saved the project timeline.\",\n    \"criteria\": {\n        \"communication\": 5,\n        \"innovation\": 4,\n        \"leadership\": 5,\n        \"problemSolving\": 5,\n        \"reliability\": 5,\n        \"teamwork\": 4\n    }\n}"
+            },
+            "url": {
+              "raw": "{{intranet_base_url}}/api/nominations/update",
+              "host": ["{{intranet_base_url}}"],
+              "path": ["api", "nominations", "update"]
+            },
+            "description": "Update the current user's nomination (reason and/or criteria)"
+          }
+        },
+        {
+          "name": "Delete Nomination",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{intranet_base_url}}/api/nominations",
+              "host": ["{{intranet_base_url}}"],
+              "path": ["api", "nominations"]
+            },
+            "description": "Delete the current user's nomination for the active voting period"
+          },
+          "response": [
+            {
+              "name": "Delete Nomination Success",
+              "originalRequest": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{intranet_base_url}}/api/nominations",
+                  "host": ["{{intranet_base_url}}"],
+                  "path": ["api", "nominations"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"message\": \"Nomination deleted successfully\",\n    \"deletedNominationId\": \"nom-001\"\n}"
+            }
+          ]
+        }
+      ],
+      "description": "Complete CRUD operations for nominations with criteria scoring"
+    },
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "Setup Data",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{intranet_base_url}}/api/setup",
+              "host": ["{{intranet_base_url}}"],
+              "path": ["api", "setup"]
+            },
+            "description": "Initialize the current voting period and setup test data"
+          }
+        }
+      ],
+      "description": "Administrative endpoints for setup and configuration"
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Set current date variables for testing",
+          "const now = new Date();",
+          "const year = now.getFullYear();",
+          "const month = (now.getMonth() + 1).toString().padStart(2, '0');",
+          "pm.collectionVariables.set('currentVotingPeriodId', `vp-${year}-${month}`);"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Common tests for all requests",
+          "pm.test('Response time is less than 1000ms', function () {",
+          "    pm.expect(pm.response.responseTime).to.be.below(1000);",
+          "});",
+          "",
+          "pm.test('Response has correct Content-Type', function () {",
+          "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+          "});"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "intranet_base_url",
+      "value": "http://localhost:7071",
+      "description": "Base URL for the Employee of Month API - Local development"
+    },
+    {
+      "key": "votingPeriodId",
+      "value": "vp-2025-09",
+      "description": "Sample voting period ID for testing"
+    },
+    {
+      "key": "employeeId",
+      "value": "emp-001",
+      "description": "Sample employee ID for testing nominations"
+    },
+    {
+      "key": "searchQuery",
+      "value": "John",
+      "description": "Sample search query for employee autocomplete"
+    },
+    {
+      "key": "authToken",
+      "value": "your-jwt-token-here",
+      "description": "JWT authentication token - replace with actual token"
+    }
+  ]
 }

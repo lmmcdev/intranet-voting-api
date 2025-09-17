@@ -372,4 +372,9 @@ export class AzureEmployeeService {
 
     return mockEmployees;
   }
+
+  async getEmployeeCount(): Promise<number> {
+    const employees = await this.getAllActiveEmployees();
+    return employees.length;
+  }
 }
