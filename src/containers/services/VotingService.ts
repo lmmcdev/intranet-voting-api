@@ -111,14 +111,19 @@ export class VotingService {
     console.log(
       `Total Employees: ${totalEmployees}, Total Votes: ${totalVotes}, Total Nominations: ${totalNominations}`
     );
-    const averageVotes: number =
+    /*  const averageVotes: number =
       totalEmployees > 0 ? totalNominations / totalEmployees : 0;
 
     const averagePercentLabel = new Intl.NumberFormat("es-ES", {
       style: "percent",
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
-    }).format(averageVotes);
+    }).format(averageVotes); */
+
+    const averageRate =
+      totalEmployees > 0 ? totalNominations / totalEmployees : 0;
+
+    const averageVotes = +(averageRate * 100).toFixed(2);
 
     const results: VoteResult[] = await Promise.all(
       employeeVotes.map(async (vote, index) => {
@@ -147,7 +152,7 @@ export class VotingService {
         status: votingPeriod.status,
       },
       totalNominations,
-      averagePercentLabel,
+      averageVotes,
       results,
       winner: results[0],
     };

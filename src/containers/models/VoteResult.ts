@@ -20,7 +20,7 @@ export interface VotingPeriodResults {
     status: string;
   };
   totalNominations: number;
-  averagePercentLabel: string;
+  averageVotes: number;
   results: VoteResult[];
   winner?: VoteResult;
 }
