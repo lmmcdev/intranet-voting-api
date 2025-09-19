@@ -49,13 +49,39 @@ export class NotificationService {
       subject: `🎉 Employee of the Month Winner - ${this.getMonthName(votingPeriod.month)} ${votingPeriod.year}`,
       body: `
         Congratulations to our Employee of the Month!
-        
+
         Winner: ${winner.employeeName}
         Department: ${winner.department}
         Position: ${winner.position}
         Votes: ${winner.nominationCount} (${winner.percentage.toFixed(1)}%)
-        
+
         Thank you to everyone who participated in the voting!
+      `,
+      type: 'email'
+    };
+
+    await this.sendNotification(message);
+  }
+
+  async sendNominationNotification(
+    nominatorEmail: string,
+    nominatedEmployeeName: string,
+    nominatedEmployeeDepartment: string,
+    votingPeriod: VotingPeriod,
+    reason: string
+  ): Promise<void> {
+    const message: NotificationMessage = {
+      to: nominatorEmail,
+      subject: `Nomination Submitted - Employee of the Month ${this.getMonthName(votingPeriod.month)} ${votingPeriod.year}`,
+      body: `
+        Your nomination has been successfully submitted!
+
+        Nominated Employee: ${nominatedEmployeeName}
+        Department: ${nominatedEmployeeDepartment}
+        Voting Period: ${this.getMonthName(votingPeriod.month)} ${votingPeriod.year}
+        Reason: ${reason}
+
+        Thank you for participating in our Employee of the Month program!
       `,
       type: 'email'
     };

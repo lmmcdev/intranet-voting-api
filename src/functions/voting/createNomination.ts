@@ -35,7 +35,11 @@ export async function createNomination(
       nominatorEmail: user.email,
     };
 
-    if (!nominationData.nominatedEmployeeId || !nominationData.reason || !nominationData.criteria) {
+    if (
+      !nominationData.nominatedEmployeeId ||
+      !nominationData.reason ||
+      !nominationData.criteria
+    ) {
       return ResponseHelper.badRequest(
         "Missing required fields: nominatedEmployeeId, reason, criteria"
       );
@@ -57,7 +61,7 @@ export async function createNomination(
 }
 
 app.http("create-nomination", {
-  methods: ["POST"],
+  methods: ["POST", "OPTIONS"],
   authLevel: "anonymous",
   route: "nominations",
   handler: createNomination,

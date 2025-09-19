@@ -1,4 +1,5 @@
 import { HttpResponseInit } from '@azure/functions';
+import { DataCleaner } from './DataCleaner';
 
 export class ResponseHelper {
   static ok(data: any): HttpResponseInit {
@@ -6,7 +7,7 @@ export class ResponseHelper {
       status: 200,
       jsonBody: {
         success: true,
-        data
+        data: DataCleaner.cleanForApiResponse(data)
       },
       headers: {
         'Content-Type': 'application/json',
@@ -22,7 +23,7 @@ export class ResponseHelper {
       status: 201,
       jsonBody: {
         success: true,
-        data
+        data: DataCleaner.cleanForApiResponse(data)
       },
       headers: {
         'Content-Type': 'application/json',
