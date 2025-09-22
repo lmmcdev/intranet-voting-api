@@ -54,7 +54,9 @@ export class VotingService {
       createdAt: new Date(),
     };
 
-    const createdNomination = await this.nominationRepository.create(nomination);
+    const createdNomination = await this.nominationRepository.create(
+      nomination
+    );
 
     try {
       const nominatedEmployee = await this.azureEmployeeService.getEmployeeById(
@@ -302,5 +304,21 @@ export class VotingService {
 
   private generateId(): string {
     return Date.now().toString() + Math.random().toString(36).substr(2, 9);
+  }
+
+  async getWinners(): Promise<VoteResult[]> {
+    const recentPeriods = await this.votingPeriodRepository.findRecentPeriods();
+    const winners: VoteResult[] = [];
+
+    for (const period of recentPeriods) {
+      if (period.status === VotingPeriodStatus.CLOSED) {
+        const results = await this.getVotingResults(period.id);
+        if (results.winner) {
+          winners.push(results.winner);
+        }
+      }
+    }
+
+    return winners;
   }
 }
