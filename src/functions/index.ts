@@ -11,6 +11,7 @@ import "./voting/createNomination";
 import "./voting/getNomination";
 import "./voting/updateNomination";
 import "./voting/deleteNomination";
+import "./voting/getWinners";
 
 // admin
 import "./admin/setupData";

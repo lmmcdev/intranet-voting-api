@@ -55,13 +55,14 @@ export async function getDependencies(): Promise<Dependencies> {
       nominationRepository,
       azureEmployeeService
     );
+    const notificationService = new NotificationService();
     const votingService = new VotingService(
       nominationRepository,
       votingPeriodRepository,
       azureEmployeeService,
-      validationService
+      validationService,
+      notificationService
     );
-    const notificationService = new NotificationService();
 
     dependencies = {
       cosmosClient,

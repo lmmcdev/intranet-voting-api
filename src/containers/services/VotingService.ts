@@ -11,23 +11,27 @@ import { NominationRepository } from "../repositories/NominationRepository";
 import { VotingPeriodRepository } from "../repositories/VotingPeriodRepository";
 import { AzureEmployeeService } from "./AzureEmployeeService";
 import { ValidationService } from "./ValidationService";
+import { NotificationService } from "./NotificationService";
 
 export class VotingService {
   private nominationRepository: NominationRepository;
   private votingPeriodRepository: VotingPeriodRepository;
   private azureEmployeeService: AzureEmployeeService;
   private validationService: ValidationService;
+  private notificationService: NotificationService;
 
   constructor(
     nominationRepository: NominationRepository,
     votingPeriodRepository: VotingPeriodRepository,
     azureEmployeeService: AzureEmployeeService,
-    validationService: ValidationService
+    validationService: ValidationService,
+    notificationService: NotificationService
   ) {
     this.nominationRepository = nominationRepository;
     this.votingPeriodRepository = votingPeriodRepository;
     this.azureEmployeeService = azureEmployeeService;
     this.validationService = validationService;
+    this.notificationService = notificationService;
   }
 
   async createNomination(
@@ -50,7 +54,29 @@ export class VotingService {
       createdAt: new Date(),
     };
 
-    return await this.nominationRepository.create(nomination);
+    const createdNomination = await this.nominationRepository.create(
+      nomination
+    );
+
+    try {
+      const nominatedEmployee = await this.azureEmployeeService.getEmployeeById(
+        nominationData.nominatedEmployeeId
+      );
+
+      if (nominatedEmployee) {
+        await this.notificationService.sendNominationNotification(
+          nominationData.nominatorEmail,
+          nominatedEmployee.name,
+          nominatedEmployee.department,
+          currentPeriod,
+          nominationData.reason
+        );
+      }
+    } catch (error) {
+      console.error("Failed to send nomination notification:", error);
+    }
+
+    return createdNomination;
   }
 
   async getCurrentVotingPeriod(): Promise<VotingPeriod | null> {
@@ -278,5 +304,21 @@ export class VotingService {
 
   private generateId(): string {
     return Date.now().toString() + Math.random().toString(36).substr(2, 9);
+  }
+
+  async getWinners(): Promise<VoteResult[]> {
+    const recentPeriods = await this.votingPeriodRepository.findRecentPeriods();
+    const winners: VoteResult[] = [];
+
+    for (const period of recentPeriods) {
+      if (period.status === VotingPeriodStatus.CLOSED) {
+        const results = await this.getVotingResults(period.id);
+        if (results.winner) {
+          winners.push(results.winner);
+        }
+      }
+    }
+
+    return winners;
   }
 }

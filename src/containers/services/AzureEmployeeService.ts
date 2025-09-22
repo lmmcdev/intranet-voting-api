@@ -123,6 +123,8 @@ export class AzureEmployeeService {
       };
     }
 
+    const filter = "accountEnabled eq true";
+
     try {
       let query = this.graphClient
         .api("/users")
@@ -135,7 +137,7 @@ export class AzureEmployeeService {
           "jobTitle",
           "accountEnabled",
         ])
-        .filter("accountEnabled eq true")
+        .filter(filter)
         .top(pageSize);
 
       if (skipToken) {
@@ -145,14 +147,16 @@ export class AzureEmployeeService {
       const users = await query.get();
 
       console.log(`Fetched ${users.value.length} users from Azure AD`);
-      console.log(`Has @odata.nextLink: ${!!users["@odata.nextLink"]}`);
-      if (users["@odata.nextLink"]) {
-        console.log(`Next link: ${users["@odata.nextLink"]}`);
-      }
 
-      const employees = users.value.map((user: AzureUser) =>
-        this.transformAzureUserToEmployee(user)
-      );
+      const employees = users.value
+        .filter(
+          (user: AzureUser) =>
+            user.mail &&
+            user.mail.trim() !== "" &&
+            user.jobTitle &&
+            user.jobTitle.trim() !== ""
+        )
+        .map((user: AzureUser) => this.transformAzureUserToEmployee(user));
 
       const nextPageToken = users["@odata.nextLink"]
         ? new URLSearchParams(new URL(users["@odata.nextLink"]).search).get(
