@@ -11,10 +11,9 @@ export interface Nomination {
   updatedAt?: Date;
 }
 
-
 export interface NominationWithEmployee extends Nomination {
   nominatedEmployee: {
-    name: string;
+    fullName: string;
     department: string;
     position: string;
   };

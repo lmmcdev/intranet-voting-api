@@ -1,20 +1,25 @@
-import { Client } from "@microsoft/microsoft-graph-client";
-import { ClientSecretCredential } from "@azure/identity";
-import { Employee } from "../modules/employee/models/employee.model";
-import {
-  AZURE_CLIENT_ID,
-  AZURE_CLIENT_SECRET,
-  AZURE_TENANT_ID,
-} from "../config/env.config";
+import { Client } from '@microsoft/microsoft-graph-client';
+import { ClientSecretCredential } from '@azure/identity';
+import { Employee } from '../modules/employee/models/employee.model';
+import { AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID } from '../config/env.config';
 
 interface AzureUser {
   id: string;
   displayName: string;
+  givenName?: string;
+  surname?: string;
   mail: string;
   userPrincipalName: string;
+  businessPhones?: string[];
+  mobilePhone?: string;
+  officeLocation?: string;
+  preferredLanguage?: string;
   department?: string;
   jobTitle?: string;
-  accountEnabled: boolean;
+  companyName?: string;
+  employeeType?: string;
+  division?: string;
+  accountEnabled?: boolean;
 }
 
 export class AzureEmployeeService {
@@ -24,16 +29,16 @@ export class AzureEmployeeService {
   private clientSecret: string;
 
   constructor() {
-    this.tenantId = AZURE_TENANT_ID || "";
-    this.clientId = AZURE_CLIENT_ID || "";
-    this.clientSecret = AZURE_CLIENT_SECRET || "";
+    this.tenantId = AZURE_TENANT_ID || '';
+    this.clientId = AZURE_CLIENT_ID || '';
+    this.clientSecret = AZURE_CLIENT_SECRET || '';
 
     // Only initialize Graph client if we have valid Azure AD configuration
     if (
       this.tenantId &&
       this.clientId &&
-      !this.tenantId.includes("your-azure") &&
-      !this.clientId.includes("your-azure")
+      !this.tenantId.includes('your-azure') &&
+      !this.clientId.includes('your-azure')
     ) {
       // Create credential
       const credential = new ClientSecretCredential(
@@ -46,10 +51,8 @@ export class AzureEmployeeService {
       this.graphClient = Client.initWithMiddleware({
         authProvider: {
           getAccessToken: async () => {
-            const token = await credential.getToken([
-              "https://graph.microsoft.com/.default",
-            ]);
-            return token?.token || "";
+            const token = await credential.getToken(['https://graph.microsoft.com/.default']);
+            return token?.token || '';
           },
         },
       });
@@ -58,11 +61,11 @@ export class AzureEmployeeService {
   }
 
   async getAllActiveEmployees(): Promise<Employee[]> {
-    console.log("Fetching all active employees from Azure AD");
-    // If Azure AD not configured, use mock data
+    console.log('Fetching all active employees from Azure AD');
+    // If Azure AD not configured, return empty array
     if (!this.graphClient) {
-      console.log("Azure AD not configured, using mock employee data");
-      return this.getAllActiveEmployeesMock();
+      console.log('Azure AD not configured, no employee data available');
+      return [];
     }
 
     try {
@@ -80,15 +83,11 @@ export class AzureEmployeeService {
         nextPageToken = result.nextPageToken;
         hasMore = result.hasMore;
 
-        console.log(
-          `Current total: ${allEmployees.length} employees, hasMore: ${hasMore}`
-        );
+        console.log(`Current total: ${allEmployees.length} employees, hasMore: ${hasMore}`);
 
         // Safety check to prevent infinite loops
         if (allEmployees.length > 10000) {
-          console.warn(
-            "Reached safety limit of 10000 employees, stopping pagination"
-          );
+          console.warn('Reached safety limit of 10000 employees, stopping pagination');
           break;
         }
       }
@@ -96,11 +95,8 @@ export class AzureEmployeeService {
       console.log(`Fetched ${allEmployees.length} total users from Azure AD`);
       return allEmployees;
     } catch (error) {
-      console.error(
-        "Error fetching users from Azure AD, falling back to mock data:",
-        error
-      );
-      return this.getAllActiveEmployeesMock();
+      console.error('Error fetching users from Azure AD:', error);
+      return [];
     }
   }
 
@@ -112,56 +108,93 @@ export class AzureEmployeeService {
     nextPageToken?: string;
     hasMore: boolean;
   }> {
-    console.log("Fetching paginated active employees from Azure AD");
-    // If Azure AD not configured, use mock data
+    console.log('Fetching paginated active employees from Azure AD');
+    // If Azure AD not configured, return empty array
     if (!this.graphClient) {
-      console.log("Azure AD not configured, using mock employee data");
-      const mockEmployees = await this.getAllActiveEmployeesMock();
+      console.log('Azure AD not configured, no employee data available');
       return {
-        employees: mockEmployees,
+        employees: [],
         hasMore: false,
       };
     }
 
-    const filter = "accountEnabled eq true";
+    const filter = 'accountEnabled eq true';
 
     try {
-      let query = this.graphClient
-        .api("/users")
-        .select([
-          "id",
-          "displayName",
-          "mail",
-          "userPrincipalName",
-          "department",
-          "jobTitle",
-          "accountEnabled",
-        ])
+      // Build query with pagination
+      let query = this.graphClient.api('/users')
         .filter(filter)
+        .select([
+          'id',
+          'displayName',
+          'givenName',
+          'surname',
+          'mail',
+          'userPrincipalName',
+          'department',
+          'jobTitle',
+          'officeLocation',
+          'companyName',
+          'employeeType',
+          'division',
+          'accountEnabled'
+        ])
         .top(pageSize);
 
       if (skipToken) {
         query = query.skipToken(skipToken);
       }
 
-      const users = await query.get();
+      const result = await query.get();
+      const users = result.value ?? [];
 
-      console.log(`Fetched ${users.value.length} users from Azure AD`);
+      console.log(`Fetched ${users.length} users from Azure AD`);
 
-      const employees = users.value
-        .filter(
-          (user: AzureUser) =>
-            user.mail &&
-            user.mail.trim() !== "" &&
-            user.jobTitle &&
-            user.jobTitle.trim() !== ""
-        )
+      // Count excluded users for reporting
+      const burgosDentalUsers = users.filter((user: AzureUser) =>
+        user.mail && user.mail.toLowerCase().includes('burgosdental.com')
+      );
+
+      const testUsers = users.filter((user: AzureUser) =>
+        user.mail && user.mail.toLowerCase().includes('testuser')
+      );
+
+      if (burgosDentalUsers.length > 0) {
+        console.log(`Excluding ${burgosDentalUsers.length} burgosdental.com users`);
+      }
+
+      if (testUsers.length > 0) {
+        console.log(`Excluding ${testUsers.length} testuser accounts`);
+      }
+
+      // Log first few user names for debugging
+      console.log('First 5 Azure AD users (after domain filtering):');
+      const filteredUsers = users.filter((user: AzureUser) =>
+        user.mail &&
+        user.mail.trim() !== '' &&
+        !user.mail.toLowerCase().includes('burgosdental.com') &&
+        !user.mail.toLowerCase().includes('testuser')
+      );
+
+      filteredUsers.slice(0, 5).forEach((user: AzureUser) => {
+        console.log(`  - "${user.displayName}" (${user.mail})`);
+      });
+
+      const employees = filteredUsers
         .map((user: AzureUser) => this.transformAzureUserToEmployee(user));
 
-      const nextPageToken = users["@odata.nextLink"]
-        ? new URLSearchParams(new URL(users["@odata.nextLink"]).search).get(
-            "$skiptoken"
-          ) || undefined
+      const totalExcluded = burgosDentalUsers.length + testUsers.length;
+      console.log(`Filtered to ${employees.length} employees (excluded ${totalExcluded} users: ${burgosDentalUsers.length} burgosdental.com + ${testUsers.length} testuser)`);
+
+      // Log first few employee names for debugging
+      console.log('First 5 transformed employees:');
+      employees.slice(0, 5).forEach((emp: Employee) => {
+        console.log(`  - "${emp.fullName}" (${emp.email})`);
+      });
+
+      const nextPageToken = result['@odata.nextLink']
+        ? new URLSearchParams(new URL(result['@odata.nextLink']).search).get('$skiptoken') ||
+          undefined
         : undefined;
 
       console.log(`Next page token: ${nextPageToken}`);
@@ -172,13 +205,9 @@ export class AzureEmployeeService {
         hasMore: !!nextPageToken,
       };
     } catch (error) {
-      console.error(
-        "Error fetching users from Azure AD, falling back to mock data:",
-        error
-      );
-      const mockEmployees = await this.getAllActiveEmployeesMock();
+      console.error('Error fetching users from Azure AD:', error);
       return {
-        employees: mockEmployees,
+        employees: [],
         hasMore: false,
       };
     }
@@ -186,94 +215,83 @@ export class AzureEmployeeService {
 
   async getEmployeeById(id: string): Promise<Employee | null> {
     if (!this.graphClient) {
-      const mockEmployees = await this.getAllActiveEmployeesMock();
-      return mockEmployees.find((emp) => emp.id === id) || null;
+      return null;
     }
 
     try {
       const user = await this.graphClient
         .api(`/users/${id}`)
         .select([
-          "id",
-          "displayName",
-          "mail",
-          "userPrincipalName",
-          "department",
-          "jobTitle",
-          "accountEnabled",
+          'id',
+          'displayName',
+          'givenName',
+          'surname',
+          'mail',
+          'userPrincipalName',
+          'department',
+          'jobTitle',
+          'officeLocation',
+          'companyName',
+          'employeeType',
+          'division',
+          'accountEnabled',
         ])
         .get();
 
       return this.transformAzureUserToEmployee(user);
     } catch (error) {
-      if ((error as any).code === "Request_ResourceNotFound") {
+      if ((error as any).code === 'Request_ResourceNotFound') {
         return null;
       }
-      console.error("Error fetching user from Azure AD:", error);
-      // Fall back to mock data
-      const mockEmployees = await this.getAllActiveEmployeesMock();
-      return mockEmployees.find((emp) => emp.id === id) || null;
+      console.error('Error fetching user from Azure AD:', error);
+      return null;
     }
   }
 
-  async searchEmployees(
-    query: string,
-    limit: number = 10
-  ): Promise<Employee[]> {
+  async searchEmployees(query: string, limit: number = 10): Promise<Employee[]> {
     console.log(`Searching employees with query: "${query}", limit: ${limit}`);
 
-    // If Azure AD not configured, search in mock data
+    // If Azure AD not configured, return empty array
     if (!this.graphClient) {
-      console.log("Azure AD not configured, searching mock employee data");
-      const mockEmployees = await this.getAllActiveEmployeesMock();
-      return this.filterAndSortEmployees(mockEmployees, query, limit);
+      console.log('Azure AD not configured, no employee data available');
+      return [];
     }
 
     try {
       // Get all employees first, then filter client-side for better flexibility
-      console.log("Getting all employees to perform client-side search");
+      console.log('Getting all employees to perform client-side search');
       const allEmployees = await this.getAllActiveEmployees();
 
-      console.log(
-        `Searching through ${allEmployees.length} employees for "${query}"`
-      );
+      console.log(`Searching through ${allEmployees.length} employees for "${query}"`);
 
       // Filter and sort client-side with flexible matching
       return this.filterAndSortEmployees(allEmployees, query, limit);
     } catch (error) {
-      console.error(
-        "Error searching users from Azure AD, falling back to mock data:",
-        error
-      );
-      const mockEmployees = await this.getAllActiveEmployeesMock();
-      return this.filterAndSortEmployees(mockEmployees, query, limit);
+      console.error('Error searching users from Azure AD:', error);
+      return [];
     }
   }
 
-  private filterAndSortEmployees(
-    employees: Employee[],
-    query: string,
-    limit: number
-  ): Employee[] {
+  private filterAndSortEmployees(employees: Employee[], query: string, limit: number): Employee[] {
     const lowerQuery = query.toLowerCase();
 
     // Score employees based on match quality
     const scoredEmployees = employees
-      .map((emp) => {
+      .map(emp => {
         let score = 0;
-        const lowerName = emp.name.toLowerCase();
-        const lowerEmail = emp.email.toLowerCase();
-        const lowerDept = emp.department.toLowerCase();
-        const lowerPos = emp.position.toLowerCase();
+        const lowerFullName = emp.fullName?.toLowerCase();
+        const lowerEmail = emp.email?.toLowerCase();
+        const lowerDept = emp.department?.toLowerCase();
+        const lowerPos = emp.position?.toLowerCase();
 
         // Prioritize exact name matches
-        if (lowerName === lowerQuery) score += 1000;
-        else if (lowerName.startsWith(lowerQuery)) score += 500;
-        else if (lowerName.includes(lowerQuery)) score += 100;
+        if (lowerFullName === lowerQuery) score += 1000;
+        else if (lowerFullName?.startsWith(lowerQuery)) score += 500;
+        else if (lowerFullName?.includes(lowerQuery)) score += 100;
 
         // Email matches
-        if (lowerEmail.startsWith(lowerQuery)) score += 300;
-        else if (lowerEmail.includes(lowerQuery)) score += 50;
+        if (lowerEmail?.startsWith(lowerQuery)) score += 300;
+        else if (lowerEmail?.includes(lowerQuery)) score += 50;
 
         // Department and position matches
         if (lowerDept.includes(lowerQuery)) score += 25;
@@ -281,34 +299,39 @@ export class AzureEmployeeService {
 
         return { employee: emp, score };
       })
-      .filter((item) => item.score > 0)
+      .filter(item => item.score > 0)
       .sort(
         (a, b) =>
-          b.score - a.score || a.employee.name.localeCompare(b.employee.name)
+          b.score - a.score || a.employee.fullName?.localeCompare(b.employee.fullName ?? '') || 0
       )
       .slice(0, limit);
 
-    return scoredEmployees.map((item) => item.employee);
+    return scoredEmployees.map(item => item.employee);
   }
 
   async getEmployeeByEmail(email: string): Promise<Employee | null> {
-    // If Azure AD not configured, search in mock data
+    // If Azure AD not configured, return null
     if (!this.graphClient) {
-      const mockEmployees = await this.getAllActiveEmployeesMock();
-      return mockEmployees.find((emp) => emp.email === email) || null;
+      return null;
     }
 
     try {
       const users = await this.graphClient
-        .api("/users")
+        .api('/users')
         .select([
-          "id",
-          "displayName",
-          "mail",
-          "userPrincipalName",
-          "department",
-          "jobTitle",
-          "accountEnabled",
+          'id',
+          'displayName',
+          'givenName',
+          'surname',
+          'mail',
+          'userPrincipalName',
+          'department',
+          'jobTitle',
+          'officeLocation',
+          'companyName',
+          'employeeType',
+          'division',
+          'accountEnabled',
         ])
         .filter(`mail eq '${email}' or userPrincipalName eq '${email}'`)
         .get();
@@ -319,62 +342,29 @@ export class AzureEmployeeService {
 
       return this.transformAzureUserToEmployee(users.value[0]);
     } catch (error) {
-      console.error("Error fetching user by email from Azure AD:", error);
-      // Fall back to mock data
-      const mockEmployees = await this.getAllActiveEmployeesMock();
-      return mockEmployees.find((emp) => emp.email === email) || null;
+      console.error('Error fetching user by email from Azure AD:', error);
+      return null;
     }
   }
 
   private transformAzureUserToEmployee(azureUser: AzureUser): Employee {
+    const firstName = azureUser.givenName?.trim() || '';
+    const lastName = azureUser.surname?.trim() || '';
+    const constructedFullName = `${firstName} ${lastName}`.trim();
+
     return {
       id: azureUser.id,
-      name: azureUser.displayName,
-      email: azureUser.mail || azureUser.userPrincipalName,
-      department: azureUser.department || "Unknown",
-      position: azureUser.jobTitle || "Unknown",
-      isActive: azureUser.accountEnabled,
-      createdAt: new Date(), // Azure AD doesn't provide creation date via Graph API easily
+      firstName: firstName || undefined,
+      lastName: lastName || undefined,
+      fullName: constructedFullName || azureUser.displayName,
+      email: (azureUser.mail || azureUser.userPrincipalName).toLowerCase(),
+      department: azureUser.department || azureUser.division || azureUser.companyName || azureUser.employeeType || 'Unknown',
+      position: azureUser.jobTitle || 'Unknown',
+      isActive: azureUser.accountEnabled ?? true,
+      location: azureUser.officeLocation || 'Unknown',
+      createdAt: new Date(),
       updatedAt: new Date(),
     };
-  }
-
-  // For development/testing - fallback to mock data if Azure AD is not configured
-  async getAllActiveEmployeesMock(): Promise<Employee[]> {
-    const mockEmployees: Employee[] = [
-      {
-        id: "emp-001",
-        name: "John Doe",
-        email: "john.doe@company.com",
-        department: "Engineering",
-        position: "Senior Developer",
-        isActive: true,
-        createdAt: new Date("2023-01-15"),
-        updatedAt: new Date("2023-01-15"),
-      },
-      {
-        id: "emp-002",
-        name: "Jane Smith",
-        email: "jane.smith@company.com",
-        department: "Marketing",
-        position: "Marketing Manager",
-        isActive: true,
-        createdAt: new Date("2023-02-01"),
-        updatedAt: new Date("2023-02-01"),
-      },
-      {
-        id: "emp-003",
-        name: "Bob Johnson",
-        email: "bob.johnson@company.com",
-        department: "HR",
-        position: "HR Specialist",
-        isActive: true,
-        createdAt: new Date("2023-03-10"),
-        updatedAt: new Date("2023-03-10"),
-      },
-    ];
-
-    return mockEmployees;
   }
 
   async getEmployeeCount(): Promise<number> {

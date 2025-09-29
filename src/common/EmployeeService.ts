@@ -1,7 +1,7 @@
 import { Employee } from '../modules/employee/models/employee.model';
 import { CreateEmployeeDto } from '../modules/employee/dto/create-employee.dto';
 import { UpdateEmployeeDto } from '../modules/employee/dto/update-employee.dto';
-import { EmployeeRepository } from './repositories/EmployeeRepository';
+import { EmployeeRepository } from '../modules/employee/repositories/EmployeeRepository';
 
 export class EmployeeService {
   private employeeRepository: EmployeeRepository;
@@ -21,7 +21,7 @@ export class EmployeeService {
       ...employeeData,
       isActive: true,
       createdAt: new Date(),
-      updatedAt: new Date()
+      updatedAt: new Date(),
     };
 
     return await this.employeeRepository.create(employee);
@@ -44,7 +44,7 @@ export class EmployeeService {
     const updatedEmployee: Employee = {
       ...employee,
       ...updateData,
-      updatedAt: new Date()
+      updatedAt: new Date(),
     };
 
     return await this.employeeRepository.update(id, updatedEmployee);

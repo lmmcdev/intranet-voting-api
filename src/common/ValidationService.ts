@@ -1,18 +1,24 @@
 import { CreateNominationDto, Criteria } from '../modules/voting/dto/create-nomination.dto';
 import { Employee } from '../modules/employee/models/employee.model';
-import { NominationRepository } from './repositories/NominationRepository';
+import { NominationRepository } from '../modules/voting/repositories/NominationRepository';
 import { AzureEmployeeService } from './AzureEmployeeService';
 
 export class ValidationService {
   private nominationRepository: NominationRepository;
   private azureEmployeeService: AzureEmployeeService;
 
-  constructor(nominationRepository: NominationRepository, azureEmployeeService: AzureEmployeeService) {
+  constructor(
+    nominationRepository: NominationRepository,
+    azureEmployeeService: AzureEmployeeService
+  ) {
     this.nominationRepository = nominationRepository;
     this.azureEmployeeService = azureEmployeeService;
   }
 
-  async validateNomination(nominationData: CreateNominationDto, votingPeriodId: string): Promise<void> {
+  async validateNomination(
+    nominationData: CreateNominationDto,
+    votingPeriodId: string
+  ): Promise<void> {
     await this.validateEmployee(nominationData.nominatedEmployeeId);
     await this.validateNominator(nominationData.nominatorEmail);
     await this.validateNominationReason(nominationData.reason);
@@ -67,8 +73,22 @@ export class ValidationService {
       throw new Error('Criteria scoring is required');
     }
 
-    const requiredFields = ['communication', 'innovation', 'leadership', 'problemSolving', 'reliability', 'teamwork'];
-    const scores = [criteria.communication, criteria.innovation, criteria.leadership, criteria.problemSolving, criteria.reliability, criteria.teamwork];
+    const requiredFields = [
+      'communication',
+      'innovation',
+      'leadership',
+      'problemSolving',
+      'reliability',
+      'teamwork',
+    ];
+    const scores = [
+      criteria.communication,
+      criteria.innovation,
+      criteria.leadership,
+      criteria.problemSolving,
+      criteria.reliability,
+      criteria.teamwork,
+    ];
 
     for (let i = 0; i < requiredFields.length; i++) {
       const field = requiredFields[i];
@@ -83,7 +103,10 @@ export class ValidationService {
     }
   }
 
-  private async validateDuplicateNomination(nominationData: CreateNominationDto, votingPeriodId: string): Promise<void> {
+  private async validateDuplicateNomination(
+    nominationData: CreateNominationDto,
+    votingPeriodId: string
+  ): Promise<void> {
     const existingNomination = await this.nominationRepository.findByNominatorAndPeriod(
       nominationData.nominatorEmail,
       votingPeriodId
@@ -94,7 +117,9 @@ export class ValidationService {
   }
 
   async validateSelfNomination(nominationData: CreateNominationDto): Promise<void> {
-    const nominatedEmployee = await this.azureEmployeeService.getEmployeeById(nominationData.nominatedEmployeeId);
+    const nominatedEmployee = await this.azureEmployeeService.getEmployeeById(
+      nominationData.nominatedEmployeeId
+    );
     if (nominatedEmployee && nominatedEmployee.email === nominationData.nominatorEmail) {
       throw new Error('No puedes nominarte a ti mismo / Self-nomination is not allowed');
     }

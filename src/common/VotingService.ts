@@ -1,16 +1,13 @@
-import {
-  Nomination,
-  NominationWithEmployee,
-} from "./models/Nomination";
-import { CreateNominationDto, Criteria } from "../modules/voting/dto/create-nomination.dto";
-import { UpdateNominationDto } from "../modules/voting/dto/update-nomination.dto";
-import { VotingPeriod, VotingPeriodStatus } from "./models/VotingPeriod";
-import { VoteResult, VotingPeriodResults } from "./models/VoteResult";
-import { NominationRepository } from "./repositories/NominationRepository";
-import { VotingPeriodRepository } from "./repositories/VotingPeriodRepository";
-import { AzureEmployeeService } from "./AzureEmployeeService";
-import { ValidationService } from "./ValidationService";
-import { NotificationService } from "./NotificationService";
+import { Nomination, NominationWithEmployee } from './models/Nomination';
+import { CreateNominationDto, Criteria } from '../modules/voting/dto/create-nomination.dto';
+import { UpdateNominationDto } from '../modules/voting/dto/update-nomination.dto';
+import { VotingPeriod, VotingPeriodStatus } from './models/VotingPeriod';
+import { VoteResult, VotingPeriodResults } from './models/VoteResult';
+import { NominationRepository } from '../modules/voting/repositories/NominationRepository';
+import { VotingPeriodRepository } from '../modules/voting/repositories/VotingPeriodRepository';
+import { AzureEmployeeService } from './AzureEmployeeService';
+import { ValidationService } from './ValidationService';
+import { NotificationService } from './NotificationService';
 
 export class VotingService {
   private nominationRepository: NominationRepository;
@@ -33,18 +30,13 @@ export class VotingService {
     this.notificationService = notificationService;
   }
 
-  async createNomination(
-    nominationData: CreateNominationDto
-  ): Promise<Nomination> {
+  async createNomination(nominationData: CreateNominationDto): Promise<Nomination> {
     const currentPeriod = await this.getCurrentVotingPeriod();
     if (!currentPeriod) {
-      throw new Error("No active voting period found");
+      throw new Error('No active voting period found');
     }
 
-    await this.validationService.validateNomination(
-      nominationData,
-      currentPeriod.id
-    );
+    await this.validationService.validateNomination(nominationData, currentPeriod.id);
 
     const nomination: Nomination = {
       id: this.generateId(),
@@ -53,9 +45,7 @@ export class VotingService {
       createdAt: new Date(),
     };
 
-    const createdNomination = await this.nominationRepository.create(
-      nomination
-    );
+    const createdNomination = await this.nominationRepository.create(nomination);
 
     try {
       const nominatedEmployee = await this.azureEmployeeService.getEmployeeById(
@@ -65,14 +55,14 @@ export class VotingService {
       if (nominatedEmployee) {
         await this.notificationService.sendNominationNotification(
           nominationData.nominatorEmail,
-          nominatedEmployee.name,
+          nominatedEmployee.fullName || 'Unknown Employee',
           nominatedEmployee.department,
           currentPeriod,
           nominationData.reason
         );
       }
     } catch (error) {
-      console.error("Failed to send nomination notification:", error);
+      console.error('Failed to send nomination notification:', error);
     }
 
     return createdNomination;
@@ -88,9 +78,7 @@ export class VotingService {
       return [];
     }
 
-    const nominations = await this.nominationRepository.findByVotingPeriod(
-      currentPeriod.id
-    );
+    const nominations = await this.nominationRepository.findByVotingPeriod(currentPeriod.id);
 
     const nominationsWithEmployee: NominationWithEmployee[] = [];
 
@@ -102,9 +90,9 @@ export class VotingService {
       nominationsWithEmployee.push({
         ...nomination,
         nominatedEmployee: {
-          name: employee?.name || "Unknown Employee",
-          department: employee?.department || "Unknown",
-          position: employee?.position || "Unknown",
+          fullName: employee?.fullName || 'Unknown Employee',
+          department: employee?.department || 'Unknown',
+          position: employee?.position || 'Unknown',
         },
       });
     }
@@ -117,16 +105,12 @@ export class VotingService {
   }
 
   async getVotingResults(votingPeriodId: string): Promise<VotingPeriodResults> {
-    const votingPeriod = await this.votingPeriodRepository.findById(
-      votingPeriodId
-    );
+    const votingPeriod = await this.votingPeriodRepository.findById(votingPeriodId);
     if (!votingPeriod) {
-      throw new Error("Voting period not found");
+      throw new Error('Voting period not found');
     }
 
-    const nominations = await this.nominationRepository.findByVotingPeriod(
-      votingPeriodId
-    );
+    const nominations = await this.nominationRepository.findByVotingPeriod(votingPeriodId);
     const employeeVotes = this.aggregateVotes(nominations);
     const totalNominations = nominations.length;
     const totalVotes = employeeVotes.reduce((sum, vote) => sum + vote.count, 0);
@@ -137,22 +121,19 @@ export class VotingService {
       `Total Employees: ${totalEmployees}, Total Votes: ${totalVotes}, Total Nominations: ${totalNominations}`
     );
 
-    const averageRate =
-      totalEmployees > 0 ? totalNominations / totalEmployees : 0;
+    const averageRate = totalEmployees > 0 ? totalNominations / totalEmployees : 0;
 
     const averageVotes = +(averageRate * 100).toFixed(2);
 
     const results: VoteResult[] = await Promise.all(
       employeeVotes.map(async (vote, index) => {
-        const employee = await this.azureEmployeeService.getEmployeeById(
-          vote.employeeId
-        );
+        const employee = await this.azureEmployeeService.getEmployeeById(vote.employeeId);
         return {
           votingPeriodId,
           employeeId: vote.employeeId,
-          employeeName: employee?.name || "Unknown",
-          department: employee?.department || "Unknown",
-          position: employee?.position || "Unknown",
+          employeeName: employee?.fullName || 'Unknown',
+          department: employee?.department || 'Unknown',
+          position: employee?.position || 'Unknown',
           nominationCount: vote.count,
           percentage: (vote.count / totalNominations) * 100,
           rank: index + 1,
@@ -178,12 +159,9 @@ export class VotingService {
   private aggregateVotes(
     nominations: Nomination[]
   ): { employeeId: string; count: number; averageCriteria: Criteria }[] {
-    const voteMap = new Map<
-      string,
-      { count: number; totalCriteria: Criteria }
-    >();
+    const voteMap = new Map<string, { count: number; totalCriteria: Criteria }>();
 
-    nominations.forEach((nomination) => {
+    nominations.forEach(nomination => {
       const current = voteMap.get(nomination.nominatedEmployeeId) || {
         count: 0,
         totalCriteria: {
@@ -199,20 +177,12 @@ export class VotingService {
       voteMap.set(nomination.nominatedEmployeeId, {
         count: current.count + 1,
         totalCriteria: {
-          communication:
-            current.totalCriteria.communication +
-            nomination.criteria.communication,
-          innovation:
-            current.totalCriteria.innovation + nomination.criteria.innovation,
-          leadership:
-            current.totalCriteria.leadership + nomination.criteria.leadership,
-          problemSolving:
-            current.totalCriteria.problemSolving +
-            nomination.criteria.problemSolving,
-          reliability:
-            current.totalCriteria.reliability + nomination.criteria.reliability,
-          teamwork:
-            current.totalCriteria.teamwork + nomination.criteria.teamwork,
+          communication: current.totalCriteria.communication + nomination.criteria.communication,
+          innovation: current.totalCriteria.innovation + nomination.criteria.innovation,
+          leadership: current.totalCriteria.leadership + nomination.criteria.leadership,
+          problemSolving: current.totalCriteria.problemSolving + nomination.criteria.problemSolving,
+          reliability: current.totalCriteria.reliability + nomination.criteria.reliability,
+          teamwork: current.totalCriteria.teamwork + nomination.criteria.teamwork,
         },
       });
     });
@@ -222,20 +192,12 @@ export class VotingService {
         employeeId,
         count: data.count,
         averageCriteria: {
-          communication:
-            Math.round((data.totalCriteria.communication / data.count) * 10) /
-            10,
-          innovation:
-            Math.round((data.totalCriteria.innovation / data.count) * 10) / 10,
-          leadership:
-            Math.round((data.totalCriteria.leadership / data.count) * 10) / 10,
-          problemSolving:
-            Math.round((data.totalCriteria.problemSolving / data.count) * 10) /
-            10,
-          reliability:
-            Math.round((data.totalCriteria.reliability / data.count) * 10) / 10,
-          teamwork:
-            Math.round((data.totalCriteria.teamwork / data.count) * 10) / 10,
+          communication: Math.round((data.totalCriteria.communication / data.count) * 10) / 10,
+          innovation: Math.round((data.totalCriteria.innovation / data.count) * 10) / 10,
+          leadership: Math.round((data.totalCriteria.leadership / data.count) * 10) / 10,
+          problemSolving: Math.round((data.totalCriteria.problemSolving / data.count) * 10) / 10,
+          reliability: Math.round((data.totalCriteria.reliability / data.count) * 10) / 10,
+          teamwork: Math.round((data.totalCriteria.teamwork / data.count) * 10) / 10,
         },
       }))
       .sort((a, b) => b.count - a.count);
@@ -247,24 +209,21 @@ export class VotingService {
   ): Promise<Nomination> {
     const currentPeriod = await this.getCurrentVotingPeriod();
     if (!currentPeriod) {
-      throw new Error("No active voting period found");
+      throw new Error('No active voting period found');
     }
 
     // Find existing nomination by nominator email and current voting period
-    const existingNomination =
-      await this.nominationRepository.findByNominatorEmail(
-        nominatorEmail,
-        currentPeriod.id
-      );
+    const existingNomination = await this.nominationRepository.findByNominatorEmail(
+      nominatorEmail,
+      currentPeriod.id
+    );
     if (!existingNomination) {
-      throw new Error("No existing nomination found to update");
+      throw new Error('No existing nomination found to update');
     }
 
     // Validate the updated data if provided
     if (updateData.nominatedEmployeeId) {
-      await this.validationService.validateEmployee(
-        updateData.nominatedEmployeeId
-      );
+      await this.validationService.validateEmployee(updateData.nominatedEmployeeId);
 
       // Check for self-nomination
       const updateNominationData: CreateNominationDto = {
@@ -287,18 +246,13 @@ export class VotingService {
     // Update the nomination
     const updatedNomination: Nomination = {
       ...existingNomination,
-      nominatedEmployeeId:
-        updateData.nominatedEmployeeId ||
-        existingNomination.nominatedEmployeeId,
+      nominatedEmployeeId: updateData.nominatedEmployeeId || existingNomination.nominatedEmployeeId,
       reason: updateData.reason || existingNomination.reason,
       criteria: updateData.criteria || existingNomination.criteria,
       updatedAt: new Date(),
     };
 
-    return await this.nominationRepository.update(
-      existingNomination.id,
-      updatedNomination
-    );
+    return await this.nominationRepository.update(existingNomination.id, updatedNomination);
   }
 
   private generateId(): string {
@@ -332,11 +286,11 @@ export class VotingService {
   async closeVotingPeriod(votingPeriodId: string): Promise<VotingPeriod> {
     const period = await this.votingPeriodRepository.findById(votingPeriodId);
     if (!period) {
-      throw new Error("Voting period not found");
+      throw new Error('Voting period not found');
     }
 
     if (period.status === VotingPeriodStatus.CLOSED) {
-      throw new Error("Voting period is already closed");
+      throw new Error('Voting period is already closed');
     }
 
     period.status = VotingPeriodStatus.CLOSED;

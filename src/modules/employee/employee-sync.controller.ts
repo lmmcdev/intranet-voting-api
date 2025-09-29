@@ -76,7 +76,8 @@ export class EmployeeSyncController {
         context.log(`Employee sync completed for ${employeeId}:`, syncResult.message);
         return ResponseHelper.ok({
           message: syncResult.message,
-          employee: syncResult.employee
+          employee: syncResult.employee,
+          matchedWithExternal: syncResult.matchedWithExternal ?? false
         });
       } else {
         context.warn(`Employee sync failed for ${employeeId}:`, syncResult.message);
@@ -127,9 +128,8 @@ const syncAllEmployeesFunction = async (
   request: HttpRequest,
   context: InvocationContext
 ): Promise<HttpResponseInit> => {
-  const { azureEmployeeService, employeeRepository } = await getDependencies();
-  const syncService = new EmployeeSyncService(azureEmployeeService, employeeRepository);
-  const controller = new EmployeeSyncController(syncService);
+  const { employeeSyncService } = await getDependencies();
+  const controller = new EmployeeSyncController(employeeSyncService);
   return controller.syncAllEmployees(request, context);
 };
 
@@ -137,9 +137,8 @@ const syncSingleEmployeeFunction = async (
   request: HttpRequest,
   context: InvocationContext
 ): Promise<HttpResponseInit> => {
-  const { azureEmployeeService, employeeRepository } = await getDependencies();
-  const syncService = new EmployeeSyncService(azureEmployeeService, employeeRepository);
-  const controller = new EmployeeSyncController(syncService);
+  const { employeeSyncService } = await getDependencies();
+  const controller = new EmployeeSyncController(employeeSyncService);
   return controller.syncSingleEmployee(request, context);
 };
 
@@ -147,9 +146,8 @@ const getSyncStatusFunction = async (
   request: HttpRequest,
   context: InvocationContext
 ): Promise<HttpResponseInit> => {
-  const { azureEmployeeService, employeeRepository } = await getDependencies();
-  const syncService = new EmployeeSyncService(azureEmployeeService, employeeRepository);
-  const controller = new EmployeeSyncController(syncService);
+  const { employeeSyncService } = await getDependencies();
+  const controller = new EmployeeSyncController(employeeSyncService);
   return controller.getSyncStatus(request, context);
 };
 

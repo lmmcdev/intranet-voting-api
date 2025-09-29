@@ -1,8 +1,9 @@
 import { CosmosClient } from "./CosmosClient";
-import { EmployeeRepository } from "../repositories/EmployeeRepository";
-import { NominationRepository } from "../repositories/NominationRepository";
-import { VotingPeriodRepository } from "../repositories/VotingPeriodRepository";
-import { EmployeeService } from "../EmployeeService";
+import { EmployeeRepository } from "../../modules/employee/repositories/EmployeeRepository";
+import { NominationRepository } from "../../modules/voting/repositories/NominationRepository";
+import { VotingPeriodRepository } from "../../modules/voting/repositories/VotingPeriodRepository";
+import { EmployeeDirectoryService } from "../../modules/employee/services/EmployeeDirectoryService";
+import { EmployeeService } from "../../modules/employee/employee.service";
 import { AzureEmployeeService } from "../AzureEmployeeService";
 import { EmployeeSyncService } from "../EmployeeSyncService";
 import { VotingService } from "../VotingService";
@@ -13,6 +14,7 @@ import {
   COSMOS_DB_KEY,
   COSMOS_DB_NAME,
 } from "../../config/env.config";
+import { EMPLOYEE_DIRECTORY_CSV_PATH } from "../../config/env.config";
 
 interface Dependencies {
   cosmosClient: CosmosClient;
@@ -25,6 +27,7 @@ interface Dependencies {
   votingService: VotingService;
   validationService: ValidationService;
   notificationService: NotificationService;
+  employeeDirectoryService: EmployeeDirectoryService;
 }
 
 let dependencies: Dependencies | null = null;
@@ -53,6 +56,9 @@ export async function getDependencies(): Promise<Dependencies> {
 
     const employeeService = new EmployeeService(employeeRepository);
     const azureEmployeeService = new AzureEmployeeService();
+    const employeeDirectoryService = new EmployeeDirectoryService(
+      EMPLOYEE_DIRECTORY_CSV_PATH || undefined
+    );
     const validationService = new ValidationService(
       nominationRepository,
       azureEmployeeService
@@ -60,7 +66,8 @@ export async function getDependencies(): Promise<Dependencies> {
     const notificationService = new NotificationService();
     const employeeSyncService = new EmployeeSyncService(
       azureEmployeeService,
-      employeeRepository
+      employeeRepository,
+      employeeDirectoryService
     );
     const votingService = new VotingService(
       nominationRepository,
@@ -81,6 +88,7 @@ export async function getDependencies(): Promise<Dependencies> {
       votingService,
       validationService,
       notificationService,
+      employeeDirectoryService,
     };
   }
 

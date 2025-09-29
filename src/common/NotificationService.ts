@@ -21,7 +21,7 @@ export class NotificationService {
         
         Please submit your nominations through the company portal.
       `,
-      type: 'email'
+      type: 'email',
     };
 
     await this.sendNotification(message);
@@ -37,7 +37,7 @@ export class NotificationService {
         Period: ${this.getMonthName(votingPeriod.month)} ${votingPeriod.year}
         Results will be announced soon.
       `,
-      type: 'email'
+      type: 'email',
     };
 
     await this.sendNotification(message);
@@ -57,7 +57,7 @@ export class NotificationService {
 
         Thank you to everyone who participated in the voting!
       `,
-      type: 'email'
+      type: 'email',
     };
 
     await this.sendNotification(message);
@@ -83,7 +83,7 @@ export class NotificationService {
 
         Thank you for participating in our Employee of the Month program!
       `,
-      type: 'email'
+      type: 'email',
     };
 
     await this.sendNotification(message);
@@ -95,8 +95,18 @@ export class NotificationService {
 
   private getMonthName(month: number): string {
     const monthNames = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
     ];
     return monthNames[month - 1];
   }
