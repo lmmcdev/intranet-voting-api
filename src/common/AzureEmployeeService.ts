@@ -1,7 +1,13 @@
 import { Client } from '@microsoft/microsoft-graph-client';
 import { ClientSecretCredential } from '@azure/identity';
 import { Employee } from '../modules/employee/models/employee.model';
-import { AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID } from '../config/env.config';
+import {
+  AZURE_CLIENT_ID,
+  AZURE_CLIENT_SECRET,
+  AZURE_TENANT_ID,
+  SYNC_EXCLUDE_DOMAINS,
+  SYNC_EXCLUDE_PATTERNS,
+} from '../config/env.config';
 
 interface AzureUser {
   id: string;
@@ -27,11 +33,23 @@ export class AzureEmployeeService {
   private tenantId: string;
   private clientId: string;
   private clientSecret: string;
+  private excludeDomains: string[];
+  private excludePatterns: string[];
 
   constructor() {
     this.tenantId = AZURE_TENANT_ID || '';
     this.clientId = AZURE_CLIENT_ID || '';
     this.clientSecret = AZURE_CLIENT_SECRET || '';
+
+    // Parse exclude domains from environment variable
+    this.excludeDomains = SYNC_EXCLUDE_DOMAINS.split(',')
+      .map(domain => domain.trim().toLowerCase())
+      .filter(domain => domain.length > 0);
+
+    // Parse exclude patterns from environment variable
+    this.excludePatterns = SYNC_EXCLUDE_PATTERNS.split(',')
+      .map(pattern => pattern.trim().toLowerCase())
+      .filter(pattern => pattern.length > 0);
 
     // Only initialize Graph client if we have valid Azure AD configuration
     if (
@@ -58,6 +76,38 @@ export class AzureEmployeeService {
       });
     }
     // If no valid config, graphClient will be undefined and we'll use mock data
+    console.log(
+      `[AzureEmployeeService] Configured to exclude domains: [${this.excludeDomains.join(', ')}]`
+    );
+    if (this.excludePatterns.length > 0) {
+      console.log(
+        `[AzureEmployeeService] Configured to exclude patterns: [${this.excludePatterns.join(', ')}]`
+      );
+    }
+  }
+
+  private shouldExcludeUser(user: AzureUser): boolean {
+    if (!user.mail) {
+      return true; // Exclude users without email
+    }
+
+    const emailLower = user.mail.toLowerCase();
+
+    // Check exclude domains
+    for (const domain of this.excludeDomains) {
+      if (emailLower.includes(domain)) {
+        return true;
+      }
+    }
+
+    // Check exclude patterns
+    for (const pattern of this.excludePatterns) {
+      if (emailLower.includes(pattern)) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   async getAllActiveEmployees(): Promise<Employee[]> {
@@ -122,7 +172,8 @@ export class AzureEmployeeService {
 
     try {
       // Build query with pagination
-      let query = this.graphClient.api('/users')
+      let query = this.graphClient
+        .api('/users')
         .filter(filter)
         .select([
           'id',
@@ -137,7 +188,7 @@ export class AzureEmployeeService {
           'companyName',
           'employeeType',
           'division',
-          'accountEnabled'
+          'accountEnabled',
         ])
         .top(pageSize);
 
@@ -151,40 +202,61 @@ export class AzureEmployeeService {
       console.log(`Fetched ${users.length} users from Azure AD`);
 
       // Count excluded users for reporting
-      const burgosDentalUsers = users.filter((user: AzureUser) =>
-        user.mail && user.mail.toLowerCase().includes('burgosdental.com')
-      );
+      const excludedUsers = users.filter((user: AzureUser) => this.shouldExcludeUser(user));
+      const validUsers = users.filter((user: AzureUser) => !this.shouldExcludeUser(user));
 
-      const testUsers = users.filter((user: AzureUser) =>
-        user.mail && user.mail.toLowerCase().includes('testuser')
-      );
+      if (excludedUsers.length > 0) {
+        console.log(`Excluding ${excludedUsers.length} users based on configured rules`);
 
-      if (burgosDentalUsers.length > 0) {
-        console.log(`Excluding ${burgosDentalUsers.length} burgosdental.com users`);
-      }
+        // Group excluded users by reason for better logging
+        const excludedByDomain = new Map<string, number>();
+        const excludedByPattern = new Map<string, number>();
 
-      if (testUsers.length > 0) {
-        console.log(`Excluding ${testUsers.length} testuser accounts`);
+        excludedUsers.forEach((user: AzureUser) => {
+          if (!user.mail) return;
+
+          const emailLower = user.mail.toLowerCase();
+
+          // Count by domain
+          this.excludeDomains.forEach(domain => {
+            if (emailLower.includes(domain)) {
+              excludedByDomain.set(domain, (excludedByDomain.get(domain) || 0) + 1);
+            }
+          });
+
+          // Count by pattern
+          this.excludePatterns.forEach(pattern => {
+            if (emailLower.includes(pattern)) {
+              excludedByPattern.set(pattern, (excludedByPattern.get(pattern) || 0) + 1);
+            }
+          });
+        });
+
+        // Log breakdown
+        excludedByDomain.forEach((count, domain) => {
+          console.log(`  - ${count} users excluded for domain: ${domain}`);
+        });
+
+        excludedByPattern.forEach((count, pattern) => {
+          console.log(`  - ${count} users excluded for pattern: ${pattern}`);
+        });
       }
 
       // Log first few user names for debugging
-      console.log('First 5 Azure AD users (after domain filtering):');
-      const filteredUsers = users.filter((user: AzureUser) =>
-        user.mail &&
-        user.mail.trim() !== '' &&
-        !user.mail.toLowerCase().includes('burgosdental.com') &&
-        !user.mail.toLowerCase().includes('testuser')
-      );
+      console.log('First 5 Azure AD users (after filtering):');
+      const filteredUsers = validUsers;
 
       filteredUsers.slice(0, 5).forEach((user: AzureUser) => {
         console.log(`  - "${user.displayName}" (${user.mail})`);
       });
 
-      const employees = filteredUsers
-        .map((user: AzureUser) => this.transformAzureUserToEmployee(user));
+      const employees = filteredUsers.map((user: AzureUser) =>
+        this.transformAzureUserToEmployee(user)
+      );
 
-      const totalExcluded = burgosDentalUsers.length + testUsers.length;
-      console.log(`Filtered to ${employees.length} employees (excluded ${totalExcluded} users: ${burgosDentalUsers.length} burgosdental.com + ${testUsers.length} testuser)`);
+      console.log(
+        `Filtered to ${employees.length} employees (excluded ${excludedUsers.length} users based on configured rules)`
+      );
 
       // Log first few employee names for debugging
       console.log('First 5 transformed employees:');
@@ -358,7 +430,12 @@ export class AzureEmployeeService {
       lastName: lastName || undefined,
       fullName: constructedFullName || azureUser.displayName,
       email: (azureUser.mail || azureUser.userPrincipalName).toLowerCase(),
-      department: azureUser.department || azureUser.division || azureUser.companyName || azureUser.employeeType || 'Unknown',
+      department:
+        azureUser.department ||
+        azureUser.division ||
+        azureUser.companyName ||
+        azureUser.employeeType ||
+        'Unknown',
       position: azureUser.jobTitle || 'Unknown',
       isActive: azureUser.accountEnabled ?? true,
       location: azureUser.officeLocation || 'Unknown',

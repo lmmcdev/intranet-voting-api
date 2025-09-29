@@ -13,3 +13,13 @@ export const AZURE_CLIENT_SECRET = process.env.AZURE_CLIENT_SECRET || '';
 
 // External employee directory (optional)
 export const EMPLOYEE_DIRECTORY_CSV_PATH = process.env.EMPLOYEE_DIRECTORY_CSV_PATH || '';
+
+// Employee sync configuration
+export const SYNC_EXCLUDE_DOMAINS = process.env.SYNC_EXCLUDE_DOMAINS || 'burgosdental.com,testuser';
+export const SYNC_EXCLUDE_PATTERNS = process.env.SYNC_EXCLUDE_PATTERNS || '';
+export const SYNC_DEFAULT_EXCLUDE_FROM_SYNC = process.env.SYNC_DEFAULT_EXCLUDE_FROM_SYNC === 'true';
+
+// Search configuration
+export const SEARCH_CASE_SENSITIVE = process.env.SEARCH_CASE_SENSITIVE === 'true';
+export const SEARCH_DEFAULT_LIMIT = parseInt(process.env.SEARCH_DEFAULT_LIMIT || '50');
+export const SEARCH_MIN_QUERY_LENGTH = parseInt(process.env.SEARCH_MIN_QUERY_LENGTH || '2');

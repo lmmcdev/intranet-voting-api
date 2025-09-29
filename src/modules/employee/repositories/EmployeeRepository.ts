@@ -1,5 +1,6 @@
 import { Employee } from '../models/employee.model';
 import { CosmosClient } from '../../../common/utils/CosmosClient';
+import { SEARCH_CASE_SENSITIVE, SEARCH_DEFAULT_LIMIT } from '../../../config/env.config';
 
 export class EmployeeRepository {
   private readonly containerName = 'employees';
@@ -141,6 +142,58 @@ export class EmployeeRepository {
       console.error(`Failed to update sync status for employee ${id}:`, error);
       throw error;
     }
+  }
+
+  async findExcludedFromSync(): Promise<Employee[]> {
+    const container = await this.cosmosClient.getContainer(this.containerName);
+    const querySpec = {
+      query: 'SELECT * FROM c WHERE c.excludeFromSync = true ORDER BY c.fullName',
+      parameters: [],
+    };
+    const { resources } = await container.items.query<Employee>(querySpec).fetchAll();
+    return resources as Employee[];
+  }
+
+  async searchByFullName(searchTerm: string, limit?: number): Promise<Employee[]> {
+    const container = await this.cosmosClient.getContainer(this.containerName);
+
+    const searchLimit = limit || SEARCH_DEFAULT_LIMIT;
+    const caseSensitive = SEARCH_CASE_SENSITIVE;
+
+    // Build query based on case sensitivity setting
+    const query = caseSensitive
+      ? `SELECT TOP @limit * FROM c WHERE CONTAINS(c.fullName, @searchTerm) ORDER BY c.fullName`
+      : `SELECT TOP @limit * FROM c WHERE CONTAINS(UPPER(c.fullName), UPPER(@searchTerm)) ORDER BY c.fullName`;
+
+    const querySpec = {
+      query,
+      parameters: [
+        { name: '@searchTerm', value: searchTerm },
+        { name: '@limit', value: searchLimit }
+      ],
+    };
+
+    const { resources } = await container.items.query<Employee>(querySpec).fetchAll();
+    return resources as Employee[];
+  }
+
+  async searchByFullNameWithWildcard(pattern: string): Promise<Employee[]> {
+    const container = await this.cosmosClient.getContainer(this.containerName);
+
+    // Using LIKE operator for pattern matching with wildcards
+    const querySpec = {
+      query: `
+        SELECT * FROM c
+        WHERE UPPER(c.fullName) LIKE UPPER(@pattern)
+        ORDER BY c.fullName
+      `,
+      parameters: [
+        { name: '@pattern', value: pattern }
+      ],
+    };
+
+    const { resources } = await container.items.query<Employee>(querySpec).fetchAll();
+    return resources as Employee[];
   }
 
   async deleteAll(): Promise<number> {
