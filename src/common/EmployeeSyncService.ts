@@ -208,9 +208,13 @@ export class EmployeeSyncService {
         const deactivatedEmployee = {
           ...existing,
           isActive: false,
+          votingEligible: false,
           updatedAt: new Date(),
         };
         await this.employeeRepository.update(existing.id, deactivatedEmployee);
+        console.log(
+          `[EmployeeSyncService] Deactivated employee not in sync file: ${existing.fullName} (${existing.id})`
+        );
       }
     }
   }
