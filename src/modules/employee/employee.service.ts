@@ -9,12 +9,17 @@ export class EmployeeService {
     department?: string;
     position?: string;
     location?: string;
+    votingGroup?: string;
   }): Promise<Employee[]> {
     return this.employeeRepository.findAll(filters);
   }
 
   async getEmployeeById(id: string): Promise<Employee | null> {
     return this.employeeRepository.findById(id);
+  }
+
+  async getEmployeeCount(): Promise<number> {
+    return this.employeeRepository.countAll();
   }
 
   async autocompleteEmployees(query: string): Promise<{ employees: Employee[]; total: number }> {
@@ -57,7 +62,7 @@ export class EmployeeService {
 
     return {
       employees,
-      total: filteredEmployees.length
+      total: filteredEmployees.length,
     };
   }
 
@@ -75,5 +80,17 @@ export class EmployeeService {
 
   async getSyncableEmployees(): Promise<Employee[]> {
     return this.employeeRepository.findSyncableEmployees();
+  }
+
+  async getVotingGroups(): Promise<string[]> {
+    return this.employeeRepository.getDistinctVotingGroups();
+  }
+
+  async updateEmployee(id: string, updates: Partial<Employee>): Promise<Employee | null> {
+    return this.employeeRepository.partialUpdate(id, updates);
+  }
+
+  async getEmployeeByEmail(email: string): Promise<Employee | null> {
+    return this.employeeRepository.findByEmail(email);
   }
 }

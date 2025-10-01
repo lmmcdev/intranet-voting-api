@@ -7,6 +7,16 @@ export class EmployeeRepository {
 
   constructor(private readonly cosmosClient: CosmosClient) {}
 
+  async countAll(): Promise<number> {
+    const container = await this.cosmosClient.getContainer(this.containerName);
+    const querySpec = {
+      query: 'SELECT COUNT(1) FROM c',
+      parameters: [],
+    };
+    const { resources } = await container.items.query<{ $1: number }>(querySpec).fetchAll();
+    return resources.length > 0 ? resources[0].$1 : 0;
+  }
+
   async create(employee: Employee): Promise<Employee> {
     const container = await this.cosmosClient.getContainer(this.containerName);
     const { resource } = await container.items.create<Employee>(employee);
@@ -37,6 +47,16 @@ export class EmployeeRepository {
     return resources.length > 0 ? (resources[0] as Employee) : null;
   }
 
+  async findByUsername(username: string): Promise<Employee | null> {
+    const container = await this.cosmosClient.getContainer(this.containerName);
+    const querySpec = {
+      query: 'SELECT * FROM c WHERE c.username = @username',
+      parameters: [{ name: '@username', value: username }],
+    };
+    const { resources } = await container.items.query<Employee>(querySpec).fetchAll();
+    return resources.length > 0 ? (resources[0] as Employee) : null;
+  }
+
   async findActiveEmployees(): Promise<Employee[]> {
     const container = await this.cosmosClient.getContainer(this.containerName);
     const querySpec = {
@@ -50,7 +70,8 @@ export class EmployeeRepository {
   async findSyncableEmployees(): Promise<Employee[]> {
     const container = await this.cosmosClient.getContainer(this.containerName);
     const querySpec = {
-      query: 'SELECT * FROM c WHERE c.isActive = true AND (c.excludeFromSync = false OR NOT IS_DEFINED(c.excludeFromSync)) ORDER BY c.fullName',
+      query:
+        'SELECT * FROM c WHERE c.isActive = true AND (c.excludeFromSync = false OR NOT IS_DEFINED(c.excludeFromSync)) ORDER BY c.fullName',
       parameters: [],
     };
     const { resources } = await container.items.query<Employee>(querySpec).fetchAll();
@@ -63,6 +84,27 @@ export class EmployeeRepository {
     return resource as Employee;
   }
 
+  async partialUpdate(id: string, updates: Partial<Employee>): Promise<Employee | null> {
+    try {
+      const existingEmployee = await this.findById(id);
+      if (!existingEmployee) {
+        return null;
+      }
+
+      const updatedEmployee: Employee = {
+        ...existingEmployee,
+        ...updates,
+        id: existingEmployee.id, // Ensure ID cannot be changed
+        updatedAt: new Date(),
+      };
+
+      return await this.update(id, updatedEmployee);
+    } catch (error) {
+      console.error(`Failed to partial update employee ${id}:`, error);
+      throw error;
+    }
+  }
+
   async delete(id: string): Promise<void> {
     const container = await this.cosmosClient.getContainer(this.containerName);
     await container.item(id, id).delete();
@@ -73,6 +115,8 @@ export class EmployeeRepository {
     department?: string;
     position?: string;
     location?: string;
+    votingGroup?: string;
+    votingEligible?: boolean;
   }): Promise<Employee[]> {
     const container = await this.cosmosClient.getContainer(this.containerName);
 
@@ -83,6 +127,9 @@ export class EmployeeRepository {
     if (filters?.isActive !== undefined) {
       conditions.push('c.isActive = @isActive');
       parameters.push({ name: '@isActive', value: filters.isActive });
+    } else {
+      // Default to only active employees if isActive filter is not provided
+      conditions.push('c.isActive = true');
     }
 
     if (filters?.department) {
@@ -94,9 +141,20 @@ export class EmployeeRepository {
       conditions.push('c.position = @position');
       parameters.push({ name: '@position', value: filters.position });
     }
+
     if (filters?.location) {
       conditions.push('c.location = @location');
       parameters.push({ name: '@location', value: filters.location });
+    }
+
+    if (filters?.votingGroup) {
+      conditions.push('c.votingGroup = @votingGroup');
+      parameters.push({ name: '@votingGroup', value: filters.votingGroup });
+    }
+
+    if (filters?.votingEligible !== undefined) {
+      conditions.push('c.votingEligible = @votingEligible');
+      parameters.push({ name: '@votingEligible', value: filters.votingEligible });
     }
 
     if (conditions.length > 0) {
@@ -169,7 +227,7 @@ export class EmployeeRepository {
       query,
       parameters: [
         { name: '@searchTerm', value: searchTerm },
-        { name: '@limit', value: searchLimit }
+        { name: '@limit', value: searchLimit },
       ],
     };
 
@@ -187,9 +245,7 @@ export class EmployeeRepository {
         WHERE UPPER(c.fullName) LIKE UPPER(@pattern)
         ORDER BY c.fullName
       `,
-      parameters: [
-        { name: '@pattern', value: pattern }
-      ],
+      parameters: [{ name: '@pattern', value: pattern }],
     };
 
     const { resources } = await container.items.query<Employee>(querySpec).fetchAll();
@@ -221,5 +277,22 @@ export class EmployeeRepository {
 
     console.log(`Deleted ${deletedCount} employees from database`);
     return deletedCount;
+  }
+
+  async getDistinctVotingGroups(): Promise<string[]> {
+    const container = await this.cosmosClient.getContainer(this.containerName);
+
+    const querySpec = {
+      query: `
+        SELECT DISTINCT VALUE c.votingGroup
+        FROM c
+        WHERE IS_DEFINED(c.votingGroup) AND c.votingGroup != null AND c.votingGroup != ""
+        ORDER BY c.votingGroup
+      `,
+      parameters: [],
+    };
+
+    const { resources } = await container.items.query<string>(querySpec).fetchAll();
+    return resources;
   }
 }

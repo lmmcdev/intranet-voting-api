@@ -156,27 +156,27 @@ const adminPingFunction = async (
 app.http("setup-data", {
   methods: ["POST", "OPTIONS"],
   authLevel: "anonymous",
-  route: "admin/setup",
+  route: "system/setup",
   handler: setupDataFunction,
 });
 
 app.http("get-system-status", {
   methods: ["GET", "OPTIONS"],
   authLevel: "anonymous",
-  route: "admin/status",
+  route: "system/status",
   handler: getSystemStatusFunction,
 });
 
 app.http("reset-voting-period", {
   methods: ["DELETE", "OPTIONS"],
   authLevel: "anonymous",
-  route: "admin/voting/{votingPeriodId}/reset",
+  route: "system/voting/{votingPeriodId}/reset",
   handler: resetVotingPeriodFunction,
 });
 
 app.http("admin-ping", {
   methods: ["GET", "OPTIONS"],
   authLevel: "anonymous",
-  route: "admin/ping",
+  route: "system/ping",
   handler: adminPingFunction,
 });

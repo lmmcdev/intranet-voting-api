@@ -1,15 +1,27 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { Employee } from '../models/employee.model';
+import { randomUUID } from 'crypto';
+import * as XLSX from 'xlsx';
+import { EligibilityHelper } from '../../../common/utils/EligibilityHelper';
 
 export interface ExternalEmployeeRecord {
   id: number;
   name: string;
-  reportsTo?: string;
+  firstName?: string;
+  lastName?: string;
+  middleName?: string;
+  positionId?: string;
+  companyCode?: string;
   jobTitle?: string;
-  directReports?: number;
+  homeDepartment?: string;
   department?: string;
   location?: string;
+  positionStatus?: string;
+  hireDate?: Date;
+  rehireDate?: Date;
+  reportsTo?: string;
+  directReports?: number;
 }
 
 export interface EmployeeDirectoryMatchResult {
@@ -32,6 +44,207 @@ export class EmployeeDirectoryService {
     this.csvPath = csvPath;
     this.recordsCache = null;
     this.nameIndex = null;
+  }
+
+  async loadCsvAsEmployees(): Promise<Employee[]> {
+    const records = await this.loadRecords();
+
+    if (records.length === 0) {
+      return [];
+    }
+
+    const employees: Employee[] = records.map(record => {
+      const isActive = record.positionStatus === 'A - Active' || record.positionStatus === 'A';
+      const votingEligible =
+        isActive && EligibilityHelper.isVotingEligible(record.hireDate, record.rehireDate);
+
+      return {
+        id: record.positionId || randomUUID(),
+        fullName: record.name,
+        firstName: record.firstName,
+        lastName: record.lastName,
+        middleName: record.middleName,
+        email: '', // Excel doesn't have email, will be filled by Azure AD
+        department: record.homeDepartment || '',
+        position: record.jobTitle || '',
+        positionId: record.positionId,
+        companyCode: record.companyCode,
+        jobTitle: record.jobTitle,
+        location: record.location,
+        positionStatus: record.positionStatus,
+        hireDate: record.hireDate,
+        rehireDate: record.rehireDate,
+        reportsTo: record.reportsTo,
+        directReportsCount: record.directReports,
+        isActive,
+        votingEligible,
+        source: 'adp' as const,
+        roles: ['user'],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+    });
+
+    return employees;
+  }
+
+  async enrichCsvEmployeesWithAzure(
+    csvEmployees: Employee[],
+    azureEmployees: Employee[]
+  ): Promise<EmployeeDirectoryMatchResult> {
+    if (csvEmployees.length === 0) {
+      console.log('[EmployeeDirectoryService] No CSV employees to enrich');
+      return {
+        enrichedEmployees: [],
+        matches: 0,
+        unmatchedAzureEmployees: azureEmployees,
+        unmatchedExternalRecords: [],
+      };
+    }
+
+    if (azureEmployees.length === 0) {
+      console.log('[EmployeeDirectoryService] No Azure employees available for enrichment');
+      return {
+        enrichedEmployees: csvEmployees.map(emp => ({ ...emp })),
+        matches: 0,
+        unmatchedAzureEmployees: [],
+        unmatchedExternalRecords: [],
+      };
+    }
+
+    console.log(
+      `[EmployeeDirectoryService] Enriching ${csvEmployees.length} CSV employees with ${azureEmployees.length} Azure AD employees`
+    );
+
+    // Build index of Azure employees by name
+    const azureIndex = new Map<string, Employee[]>();
+    for (const azureEmp of azureEmployees) {
+      const keys = this.generateNameKeys(azureEmp?.fullName || '');
+      for (const key of keys) {
+        if (!key) continue;
+        const existing = azureIndex.get(key);
+        if (existing) {
+          existing.push(azureEmp);
+        } else {
+          azureIndex.set(key, [azureEmp]);
+        }
+      }
+    }
+
+    const matchedAzureIds = new Set<string>();
+    const enrichedEmployees: Employee[] = [];
+    const unmatchedCsvEmployees: Employee[] = [];
+
+    for (const csvEmployee of csvEmployees) {
+      const azureMatch = this.findMatchingAzureEmployee(csvEmployee, azureIndex);
+
+      if (!azureMatch) {
+        unmatchedCsvEmployees.push(csvEmployee);
+        enrichedEmployees.push({ ...csvEmployee });
+        continue;
+      }
+
+      matchedAzureIds.add(azureMatch.id);
+      enrichedEmployees.push(this.mergeCsvWithAzure(csvEmployee, azureMatch));
+    }
+
+    const unmatchedAzureEmployees = azureEmployees.filter(emp => !matchedAzureIds.has(emp.id));
+
+    console.log(
+      `[EmployeeDirectoryService] Enrichment complete: ${matchedAzureIds.size} matches, ${unmatchedCsvEmployees.length} unmatched CSV employees, ${unmatchedAzureEmployees.length} unmatched Azure employees`
+    );
+
+    return {
+      enrichedEmployees,
+      matches: matchedAzureIds.size,
+      unmatchedAzureEmployees,
+      unmatchedExternalRecords: [], // Not used in this flow
+    };
+  }
+
+  private findMatchingAzureEmployee(
+    csvEmployee: Employee,
+    azureIndex: Map<string, Employee[]>
+  ): Employee | undefined {
+    const csvName = csvEmployee?.fullName || '';
+    const candidateKeys = this.generateNameKeys(csvName);
+
+    // Try exact key matches
+    for (const key of candidateKeys) {
+      if (!key) continue;
+
+      const matches = azureIndex.get(key);
+      if (!matches || matches.length === 0) continue;
+
+      if (matches.length === 1) {
+        return matches[0];
+      }
+
+      // If multiple matches, try to match by department
+      const normalizedDepartment = this.normalizeText(csvEmployee.department);
+      const departmentMatch = matches.find(azureEmp => {
+        const azureDepartment = this.normalizeText(azureEmp.department);
+        return (
+          !!normalizedDepartment && !!azureDepartment && normalizedDepartment === azureDepartment
+        );
+      });
+
+      if (departmentMatch) {
+        return departmentMatch;
+      }
+
+      return matches[0];
+    }
+
+    // Try partial name matching
+    return this.findPartialAzureMatch(csvName, azureIndex);
+  }
+
+  private findPartialAzureMatch(
+    csvName: string,
+    azureIndex: Map<string, Employee[]>
+  ): Employee | undefined {
+    const csvNormalized = this.normalizeText(csvName);
+    const csvTokens = csvNormalized.split(' ').filter(Boolean);
+
+    if (csvTokens.length < 2) {
+      return undefined;
+    }
+
+    for (const [, azureEmployees] of azureIndex.entries()) {
+      for (const azureEmp of azureEmployees) {
+        const azureNormalized = this.normalizeText(azureEmp?.fullName || '');
+        const azureTokens = azureNormalized.split(' ').filter(Boolean);
+
+        if (azureTokens.length < 2) continue;
+
+        const isSubset =
+          this.isNameSubset(csvTokens, azureTokens) || this.isNameSubset(azureTokens, csvTokens);
+
+        if (isSubset) {
+          return azureEmp;
+        }
+      }
+    }
+
+    return undefined;
+  }
+
+  private mergeCsvWithAzure(csvEmployee: Employee, azureEmployee: Employee): Employee {
+    // Azure AD data takes priority for email and id, CSV data for everything else
+    return {
+      ...csvEmployee,
+      id: azureEmployee.id, // Use Azure AD ID
+      email: azureEmployee.email, // Use Azure AD email
+      // Keep CSV data for other fields, but use Azure AD as fallback if CSV is empty
+      department: csvEmployee.department || azureEmployee.department,
+      position: csvEmployee.position || azureEmployee.position,
+      location: csvEmployee.location || azureEmployee.location,
+      reportsTo: csvEmployee.reportsTo || azureEmployee.reportsTo,
+      directReportsCount: csvEmployee.directReportsCount ?? azureEmployee.directReportsCount,
+      source: 'adp' as const, // This employee exists in both sources
+      roles: azureEmployee.roles || csvEmployee.roles || ['user'],
+    };
   }
 
   async matchEmployees(employees: Employee[]): Promise<EmployeeDirectoryMatchResult> {
@@ -130,12 +343,23 @@ export class EmployeeDirectoryService {
     }
 
     try {
-      const fileContent = await fs.readFile(this.csvPath, 'utf-8');
-      const records = this.parseCsv(fileContent);
+      const fileExtension = path.extname(this.csvPath).toLowerCase();
+
+      let records: ExternalEmployeeRecord[];
+      if (fileExtension === '.xlsx' || fileExtension === '.xls') {
+        // Parse Excel file
+        const buffer = await fs.readFile(this.csvPath);
+        records = this.parseExcel(buffer);
+      } else {
+        // Parse CSV file (legacy support)
+        const fileContent = await fs.readFile(this.csvPath, 'utf-8');
+        records = this.parseCsv(fileContent);
+      }
+
       this.recordsCache = records;
       return records;
     } catch (error) {
-      console.warn(`[EmployeeDirectoryService] Unable to read CSV file at ${this.csvPath}:`, error);
+      console.warn(`[EmployeeDirectoryService] Unable to read file at ${this.csvPath}:`, error);
       return [];
     }
   }
@@ -266,14 +490,34 @@ export class EmployeeDirectoryService {
         ? record.directReports
         : undefined;
 
+    const isActive = record.positionStatus
+      ? record.positionStatus === 'A - Active' || record.positionStatus === 'A'
+      : employee.isActive;
+
+    const hireDate = record.hireDate || employee.hireDate;
+    const rehireDate = record.rehireDate || employee.rehireDate;
+    const votingEligible = isActive && EligibilityHelper.isVotingEligible(hireDate, rehireDate);
+
     return {
       ...employee,
+      firstName: record.firstName || employee.firstName,
+      lastName: record.lastName || employee.lastName,
+      middleName: record.middleName || employee.middleName,
       department:
         this.preferCsvValue(record.department, employee.department) ?? employee.department,
       position: this.preferCsvValue(record.jobTitle, employee.position) ?? employee.position,
+      positionId: record.positionId || employee.positionId,
+      companyCode: record.companyCode || employee.companyCode,
+      jobTitle: record.jobTitle || employee.jobTitle,
+      homeDepartment: record.homeDepartment || employee.homeDepartment,
       location: this.preferCsvValue(record.location, employee.location) ?? employee.location,
+      positionStatus: record.positionStatus || employee.positionStatus,
+      hireDate,
+      rehireDate,
       reportsTo: record.reportsTo?.trim() || employee.reportsTo,
       directReportsCount: directReportsCount ?? employee.directReportsCount,
+      isActive,
+      votingEligible,
     };
   }
 
@@ -293,6 +537,119 @@ export class EmployeeDirectoryService {
   private cleanValue(value?: string): string | undefined {
     const trimmed = value?.trim();
     return trimmed && trimmed.length > 0 ? trimmed : undefined;
+  }
+
+  private parseExcel(buffer: Buffer): ExternalEmployeeRecord[] {
+    try {
+      const workbook = XLSX.read(buffer, { type: 'buffer' });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+
+      // Convert sheet to JSON
+      const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet, { raw: false });
+
+      if (jsonData.length === 0) {
+        return [];
+      }
+
+      const records: ExternalEmployeeRecord[] = [];
+
+      for (let i = 0; i < jsonData.length; i++) {
+        const row = jsonData[i];
+
+        // Extract fields based on the ADP Excel structure
+        const lastName = this.cleanValue(row['LEGAL LAST NAME']);
+        const firstName = this.cleanValue(row['LEGAL FIRST NAME']);
+        const middleName = this.cleanValue(row['LEGAL MIDDLE NAME']);
+
+        if (!lastName || !firstName) {
+          continue; // Skip rows without valid name
+        }
+
+        // Build full name
+        const fullName = middleName
+          ? `${firstName} ${middleName} ${lastName}`
+          : `${firstName} ${lastName}`;
+
+        // Parse job title to extract position and department
+        const jobTitleRaw = this.cleanValue(row['JOB TITLE']);
+        const { position, code } = this.parseJobTitle(jobTitleRaw);
+
+        const homeDepartmentRaw = this.cleanValue(row['HOME DEPARTMENT']);
+        const { department, departmentCode } = this.parseDepartment(homeDepartmentRaw);
+
+        // Parse dates
+        const hireDate = this.parseDate(row['HIRE DATE']);
+        const rehireDate = this.parseDate(row['REHIRE DATE']);
+
+        const record: ExternalEmployeeRecord = {
+          id: i + 1,
+          name: fullName,
+          firstName,
+          lastName,
+          middleName,
+          positionId: this.cleanValue(row['POSITION ID']),
+          companyCode: this.cleanValue(row['COMPANY CODE']),
+          jobTitle: position,
+          homeDepartment: department,
+          department: department,
+          location: this.cleanValue(row['LOCATION']),
+          positionStatus: this.cleanValue(row['POSITION STATUS']),
+          hireDate,
+          rehireDate,
+        };
+
+        records.push(record);
+      }
+
+      console.log(`[EmployeeDirectoryService] Parsed ${records.length} records from Excel file`);
+      return records;
+    } catch (error) {
+      console.error('[EmployeeDirectoryService] Error parsing Excel file:', error);
+      return [];
+    }
+  }
+
+  private parseJobTitle(jobTitle?: string): { position?: string; code?: string } {
+    if (!jobTitle) return {};
+
+    // Format: "CODE - Position"
+    const match = jobTitle.match(/^([A-Z]+)\s*-\s*(.+)$/);
+    if (match) {
+      return {
+        code: match[1].trim(),
+        position: match[2].trim(),
+      };
+    }
+
+    return { position: jobTitle };
+  }
+
+  private parseDepartment(department?: string): { department?: string; departmentCode?: string } {
+    if (!department) return {};
+
+    // Format: "CODE - Department Name"
+    const match = department.match(/^([A-Z]+)\s*-\s*(.+)$/);
+    if (match) {
+      return {
+        departmentCode: match[1].trim(),
+        department: match[2].trim(),
+      };
+    }
+
+    return { department };
+  }
+
+  private parseDate(dateStr?: string): Date | undefined {
+    if (!dateStr || dateStr.trim() === '') return undefined;
+
+    try {
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) return undefined;
+      return date;
+    } catch {
+      return undefined;
+    }
   }
 
   private parseCsv(content: string): ExternalEmployeeRecord[] {
@@ -455,6 +812,40 @@ export class EmployeeDirectoryService {
     const tokens = normalized.split(' ').filter(Boolean);
     tokens.sort();
     return tokens.join(' ');
+  }
+
+  private parseFullName(fullName: string): {
+    firstName?: string;
+    lastName?: string;
+    middleName?: string;
+  } {
+    if (!fullName) {
+      return {};
+    }
+
+    const parts = fullName.trim().split(/\s+/);
+
+    if (parts.length === 0) {
+      return {};
+    }
+
+    if (parts.length === 1) {
+      return { firstName: parts[0] };
+    }
+
+    if (parts.length === 2) {
+      return {
+        firstName: parts[0],
+        lastName: parts[1],
+      };
+    }
+
+    // 3 or more parts: first is firstName, rest is compound lastName (Latin American naming convention)
+    // e.g., "Alien Tapia Salvador" -> firstName: "Alien", lastName: "Tapia Salvador"
+    return {
+      firstName: parts[0],
+      lastName: parts.slice(1).join(' '),
+    };
   }
 
   private normalizeText(value?: string): string {

@@ -5,6 +5,9 @@ import {
   EmployeeDirectoryMatchResult,
   EmployeeDirectoryService,
 } from '../modules/employee/services/EmployeeDirectoryService';
+import { VotingGroupService } from './VotingGroupService';
+import { PasswordHelper } from './utils/PasswordHelper';
+import { DEFAULT_INITIAL_PASSWORD } from '../config/env.config';
 
 export interface SyncResult {
   newUsers: number;
@@ -20,15 +23,18 @@ export class EmployeeSyncService {
   private azureEmployeeService: AzureEmployeeService;
   private employeeRepository: EmployeeRepository;
   private employeeDirectoryService?: EmployeeDirectoryService;
+  private votingGroupService?: VotingGroupService;
 
   constructor(
     azureEmployeeService: AzureEmployeeService,
     employeeRepository: EmployeeRepository,
-    employeeDirectoryService?: EmployeeDirectoryService
+    employeeDirectoryService?: EmployeeDirectoryService,
+    votingGroupService?: VotingGroupService
   ) {
     this.azureEmployeeService = azureEmployeeService;
     this.employeeRepository = employeeRepository;
     this.employeeDirectoryService = employeeDirectoryService;
+    this.votingGroupService = votingGroupService;
   }
 
   async syncEmployeesFromAzure(): Promise<SyncResult> {
@@ -43,42 +49,86 @@ export class EmployeeSyncService {
     };
 
     try {
-      const azureEmployees = await this.azureEmployeeService.getAllActiveEmployees();
-      const matchResult = await this.enrichWithExternalDirectory(azureEmployees);
-      result.matchedExternalRecords = matchResult.matches;
-      result.unmatchedAzureEmployees = matchResult.unmatchedAzureEmployees.length;
-      result.unmatchedExternalRecords = matchResult.unmatchedExternalRecords.length;
+      // Load CSV employees only
+      let finalEmployees: Employee[] = [];
+      if (this.employeeDirectoryService) {
+        finalEmployees = await this.employeeDirectoryService.loadCsvAsEmployees();
+        console.log(`[EmployeeSyncService] Loaded ${finalEmployees.length} employees from CSV`);
+        result.matchedExternalRecords = finalEmployees.length;
+      } else {
+        throw new Error('Employee directory service not configured - CSV sync not available');
+      }
 
-      const enrichedEmployees = matchResult.enrichedEmployees;
+      // Step 4: Sync to database
       const existingEmployees = await this.employeeRepository.findSyncableEmployees();
-
       const existingEmployeeMap = new Map<string, Employee>();
       existingEmployees.forEach(emp => existingEmployeeMap.set(emp.id, emp));
 
-      for (const azureEmployee of enrichedEmployees) {
+      // Track which employees we've processed to avoid duplicates
+      const processedIds = new Set<string>();
+
+      // Track usernames to ensure uniqueness
+      const existingUsernames = new Set<string>(
+        existingEmployees.map(emp => emp.username).filter((username): username is string => !!username)
+      );
+
+      for (const employee of finalEmployees) {
+        // Skip if we've already processed this employee ID
+        if (processedIds.has(employee.id)) {
+          console.log(`[EmployeeSyncService] Skipping duplicate employee ID: ${employee.id}`);
+          continue;
+        }
+
+        processedIds.add(employee.id);
         result.totalProcessed++;
 
         try {
-          const existingEmployee = existingEmployeeMap.get(azureEmployee.id);
+          // Assign voting group
+          if (this.votingGroupService) {
+            employee.votingGroup = this.votingGroupService.assignVotingGroup(employee);
+          }
+
+          const existingEmployee = existingEmployeeMap.get(employee.id);
+
+          // Generate username and password if not exists
+          if (!employee.username && employee.firstName && employee.lastName) {
+            employee.username = await this.generateUniqueUsername(
+              employee.firstName,
+              employee.lastName,
+              existingUsernames
+            );
+            existingUsernames.add(employee.username);
+          }
+
+          // Set default password for new employees only
+          if (!existingEmployee && !employee.password) {
+            employee.password = await PasswordHelper.hash(DEFAULT_INITIAL_PASSWORD);
+            employee.firstLogin = true; // Flag for password change on first login
+            console.log(
+              `[EmployeeSyncService] Set default password for ${employee.username}`
+            );
+          }
 
           if (!existingEmployee) {
-            await this.employeeRepository.create(azureEmployee);
+            await this.employeeRepository.create(employee);
             result.newUsers++;
-          } else if (this.hasEmployeeChanged(existingEmployee, azureEmployee)) {
+          } else if (this.hasEmployeeChanged(existingEmployee, employee)) {
             const updatedEmployee = {
-              ...azureEmployee,
+              ...employee,
               createdAt: existingEmployee.createdAt,
               updatedAt: new Date(),
+              password: existingEmployee.password, // Preserve existing password
             };
-            await this.employeeRepository.update(azureEmployee.id, updatedEmployee);
+            await this.employeeRepository.update(employee.id, updatedEmployee);
             result.updatedUsers++;
           }
         } catch (error) {
-          const errorMessage = `Error processing employee ${azureEmployee.id}: ${error instanceof Error ? error.message : String(error)}`;
+          const errorMessage = `Error processing employee ${employee.id}: ${error instanceof Error ? error.message : String(error)}`;
           result.errors.push(errorMessage);
         }
       }
-      await this.deactivateRemovedEmployees(enrichedEmployees, existingEmployees);
+
+      await this.deactivateRemovedEmployees(finalEmployees, existingEmployees);
     } catch (error) {
       const errorMessage = `Error during sync: ${error instanceof Error ? error.message : String(error)}`;
       result.errors.push(errorMessage);
@@ -87,17 +137,64 @@ export class EmployeeSyncService {
     return result;
   }
 
+  private async generateUniqueUsername(
+    firstName: string,
+    lastName: string,
+    existingUsernames: Set<string>
+  ): Promise<string> {
+    // Normalize names: lowercase and remove special characters
+    const normalizedFirstName = firstName.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    // For compound last names (e.g., "Tapia Salvador"), use only the first part
+    const lastNameFirstPart = lastName.split(/\s+/)[0];
+    const normalizedLastName = lastNameFirstPart.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    // Base username: firstname.lastname (first part of compound last name)
+    let username = `${normalizedFirstName}.${normalizedLastName}`;
+
+    // If username already exists, append a number
+    if (existingUsernames.has(username)) {
+      let counter = 1;
+      while (existingUsernames.has(`${username}${counter}`)) {
+        counter++;
+      }
+      username = `${username}${counter}`;
+    }
+
+    return username;
+  }
+
   private hasEmployeeChanged(existing: Employee, azure: Employee): boolean {
     return (
       existing.fullName !== azure.fullName ||
+      existing.firstName !== azure.firstName ||
+      existing.lastName !== azure.lastName ||
+      existing.middleName !== azure.middleName ||
       existing.email !== azure.email ||
       existing.department !== azure.department ||
       existing.position !== azure.position ||
+      existing.positionId !== azure.positionId ||
+      existing.companyCode !== azure.companyCode ||
+      existing.jobTitle !== azure.jobTitle ||
+      existing.homeDepartment !== azure.homeDepartment ||
       existing.reportsTo !== azure.reportsTo ||
       existing.directReportsCount !== azure.directReportsCount ||
       existing.location !== azure.location ||
+      existing.positionStatus !== azure.positionStatus ||
+      existing.votingEligible !== azure.votingEligible ||
+      this.hasDateChanged(existing.hireDate, azure.hireDate) ||
+      this.hasDateChanged(existing.rehireDate, azure.rehireDate) ||
       existing.isActive !== azure.isActive
     );
+  }
+
+  private hasDateChanged(date1?: Date, date2?: Date): boolean {
+    // Handle undefined/null cases
+    if (!date1 && !date2) return false;
+    if (!date1 || !date2) return true;
+
+    // Compare dates by converting to ISO string
+    return new Date(date1).toISOString() !== new Date(date2).toISOString();
   }
 
   private async deactivateRemovedEmployees(
@@ -174,11 +271,73 @@ export class EmployeeSyncService {
     }
   }
 
+  async updateVotingGroups(
+    strategy: string,
+    customMappings?: string
+  ): Promise<{
+    success: boolean;
+    totalUpdated: number;
+    errors: string[];
+  }> {
+    const result = {
+      success: true,
+      totalUpdated: 0,
+      errors: [] as string[],
+    };
+
+    try {
+      // Update VotingGroupService configuration
+      if (!this.votingGroupService) {
+        throw new Error('VotingGroupService not configured');
+      }
+
+      this.votingGroupService.updateConfiguration(strategy as any, customMappings);
+
+      // Get all active employees
+      const employees = await this.employeeRepository.findSyncableEmployees();
+      console.log(`[EmployeeSyncService] Updating voting groups for ${employees.length} employees`);
+
+      // Update each employee's voting group
+      for (const employee of employees) {
+        try {
+          const newVotingGroup = this.votingGroupService.assignVotingGroup(employee);
+
+          // Only update if voting group changed
+          if (employee.votingGroup !== newVotingGroup) {
+            const updatedEmployee = {
+              ...employee,
+              votingGroup: newVotingGroup,
+              updatedAt: new Date(),
+            };
+
+            await this.employeeRepository.update(employee.id, updatedEmployee);
+            result.totalUpdated++;
+          }
+        } catch (error) {
+          const errorMessage = `Error updating employee ${employee.id}: ${error instanceof Error ? error.message : String(error)}`;
+          result.errors.push(errorMessage);
+        }
+      }
+
+      console.log(
+        `[EmployeeSyncService] Voting groups updated: ${result.totalUpdated} employees modified`
+      );
+    } catch (error) {
+      result.success = false;
+      const errorMessage = `Error during voting group update: ${error instanceof Error ? error.message : String(error)}`;
+      result.errors.push(errorMessage);
+    }
+
+    return result;
+  }
+
   private async enrichWithExternalDirectory(
     employees: Employee[]
   ): Promise<EmployeeDirectoryMatchResult> {
     if (!this.employeeDirectoryService) {
-      console.log('[EmployeeSyncService] No employee directory service configured - CSV merge disabled');
+      console.log(
+        '[EmployeeSyncService] No employee directory service configured - CSV merge disabled'
+      );
       return {
         enrichedEmployees: employees.map(employee => ({ ...employee })),
         matches: 0,
@@ -198,9 +357,13 @@ export class EmployeeSyncService {
     }
 
     try {
-      console.log(`[EmployeeSyncService] Attempting to enrich ${employees.length} employees with CSV data`);
+      console.log(
+        `[EmployeeSyncService] Attempting to enrich ${employees.length} employees with CSV data`
+      );
       const result = await this.employeeDirectoryService.matchEmployees(employees);
-      console.log(`[EmployeeSyncService] CSV merge result: ${result.matches} matches, ${result.unmatchedAzureEmployees.length} unmatched Azure employees, ${result.unmatchedExternalRecords.length} unmatched CSV records`);
+      console.log(
+        `[EmployeeSyncService] CSV merge result: ${result.matches} matches, ${result.unmatchedAzureEmployees.length} unmatched Azure employees, ${result.unmatchedExternalRecords.length} unmatched CSV records`
+      );
       return result;
     } catch (error) {
       console.warn('[EmployeeSyncService] Failed to match external directory:', error);

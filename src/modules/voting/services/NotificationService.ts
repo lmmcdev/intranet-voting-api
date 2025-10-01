@@ -1,5 +1,5 @@
-import { VoteResult } from './models/VoteResult';
-import { VotingPeriod } from './models/VotingPeriod';
+import { VoteResult } from '../../../common/models/VoteResult';
+import { VotingPeriod } from '../../../common/models/VotingPeriod';
 
 export interface NotificationMessage {
   to: string;

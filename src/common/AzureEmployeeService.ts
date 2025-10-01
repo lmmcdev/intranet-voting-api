@@ -439,6 +439,8 @@ export class AzureEmployeeService {
       position: azureUser.jobTitle || 'Unknown',
       isActive: azureUser.accountEnabled ?? true,
       location: azureUser.officeLocation || 'Unknown',
+      source: 'adp' as const,
+      roles: ['user'],
       createdAt: new Date(),
       updatedAt: new Date(),
     };

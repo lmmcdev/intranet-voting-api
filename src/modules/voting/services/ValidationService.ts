@@ -1,18 +1,15 @@
-import { CreateNominationDto, Criteria } from '../modules/voting/dto/create-nomination.dto';
-import { Employee } from '../modules/employee/models/employee.model';
-import { NominationRepository } from '../modules/voting/repositories/NominationRepository';
-import { AzureEmployeeService } from './AzureEmployeeService';
+import { CreateNominationDto, Criteria } from '../dto/create-nomination.dto';
+import { Employee } from '../../employee/models/employee.model';
+import { NominationRepository } from '../repositories/NominationRepository';
+import { EmployeeRepository } from '../../employee/repositories/EmployeeRepository';
 
 export class ValidationService {
   private nominationRepository: NominationRepository;
-  private azureEmployeeService: AzureEmployeeService;
+  private employeeRepository: EmployeeRepository;
 
-  constructor(
-    nominationRepository: NominationRepository,
-    azureEmployeeService: AzureEmployeeService
-  ) {
+  constructor(nominationRepository: NominationRepository, employeeRepository: EmployeeRepository) {
     this.nominationRepository = nominationRepository;
-    this.azureEmployeeService = azureEmployeeService;
+    this.employeeRepository = employeeRepository;
   }
 
   async validateNomination(
@@ -28,7 +25,7 @@ export class ValidationService {
   }
 
   async validateEmployee(employeeId: string): Promise<void> {
-    const employee = await this.azureEmployeeService.getEmployeeById(employeeId);
+    const employee = await this.employeeRepository.findById(employeeId);
     if (!employee) {
       throw new Error('Employee not found');
     }
@@ -41,13 +38,13 @@ export class ValidationService {
     if (!this.isValidEmail(nominatorEmail)) {
       throw new Error('Invalid nominator email format');
     }
-
+    // validate nominator and nominated are on the same votingGroup
     // Skip nominator validation when SKIP_AUTH is enabled (for development)
     if (process.env.SKIP_AUTH === 'true') {
       return; // Allow any email in development
     }
 
-    const nominator = await this.azureEmployeeService.getEmployeeByEmail(nominatorEmail);
+    const nominator = await this.employeeRepository.findByEmail(nominatorEmail);
     if (!nominator) {
       throw new Error('Nominator must be an active employee');
     }
@@ -56,7 +53,7 @@ export class ValidationService {
     }
   }
 
-  validateNominationReason(reason: string): void {
+  async validateNominationReason(reason: string): Promise<void> {
     if (!reason || reason.trim().length === 0) {
       throw new Error('Nomination reason is required');
     }
@@ -117,7 +114,7 @@ export class ValidationService {
   }
 
   async validateSelfNomination(nominationData: CreateNominationDto): Promise<void> {
-    const nominatedEmployee = await this.azureEmployeeService.getEmployeeById(
+    const nominatedEmployee = await this.employeeRepository.findById(
       nominationData.nominatedEmployeeId
     );
     if (nominatedEmployee && nominatedEmployee.email === nominationData.nominatorEmail) {

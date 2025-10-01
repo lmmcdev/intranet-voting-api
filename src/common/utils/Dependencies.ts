@@ -1,20 +1,24 @@
-import { CosmosClient } from "./CosmosClient";
-import { EmployeeRepository } from "../../modules/employee/repositories/EmployeeRepository";
-import { NominationRepository } from "../../modules/voting/repositories/NominationRepository";
-import { VotingPeriodRepository } from "../../modules/voting/repositories/VotingPeriodRepository";
-import { EmployeeDirectoryService } from "../../modules/employee/services/EmployeeDirectoryService";
-import { EmployeeService } from "../../modules/employee/employee.service";
-import { AzureEmployeeService } from "../AzureEmployeeService";
-import { EmployeeSyncService } from "../EmployeeSyncService";
-import { VotingService } from "../VotingService";
-import { ValidationService } from "../ValidationService";
-import { NotificationService } from "../NotificationService";
+import { CosmosClient } from './CosmosClient';
+import { EmployeeRepository } from '../../modules/employee/repositories/EmployeeRepository';
+import { NominationRepository } from '../../modules/voting/repositories/NominationRepository';
+import { VotingPeriodRepository } from '../../modules/voting/repositories/VotingPeriodRepository';
+import { EmployeeDirectoryService } from '../../modules/employee/services/EmployeeDirectoryService';
+import { EmployeeService } from '../../modules/employee/employee.service';
+import { AzureEmployeeService } from '../AzureEmployeeService';
+import { EmployeeSyncService } from '../EmployeeSyncService';
+import { VotingGroupService, VotingGroupStrategy } from '../VotingGroupService';
+import { VotingService } from '../../modules/voting/services/VotingService';
+import { ValidationService } from '../../modules/voting/services/ValidationService';
+import { NotificationService } from '../../modules/voting/services/NotificationService';
+import { AuthService } from '../../modules/auth/auth.service';
 import {
   COSMOS_DB_ENDPOINT,
   COSMOS_DB_KEY,
   COSMOS_DB_NAME,
-} from "../../config/env.config";
-import { EMPLOYEE_DIRECTORY_CSV_PATH } from "../../config/env.config";
+  EMPLOYEE_DIRECTORY_CSV_PATH,
+  VOTING_GROUP_STRATEGY,
+  VOTING_GROUP_CUSTOM_MAPPINGS,
+} from '../../config/env.config';
 
 interface Dependencies {
   cosmosClient: CosmosClient;
@@ -28,6 +32,8 @@ interface Dependencies {
   validationService: ValidationService;
   notificationService: NotificationService;
   employeeDirectoryService: EmployeeDirectoryService;
+  votingGroupService: VotingGroupService;
+  authService: AuthService;
 }
 
 let dependencies: Dependencies | null = null;
@@ -39,9 +45,7 @@ export async function getDependencies(): Promise<Dependencies> {
     const databaseId = COSMOS_DB_NAME;
 
     if (!endpoint || !key) {
-      throw new Error(
-        "COSMOS_DB_ENDPOINT and COSMOS_DB_KEY environment variables are required"
-      );
+      throw new Error('COSMOS_DB_ENDPOINT and COSMOS_DB_KEY environment variables are required');
     }
 
     const cosmosClient = new CosmosClient(endpoint, key, databaseId);
@@ -59,23 +63,27 @@ export async function getDependencies(): Promise<Dependencies> {
     const employeeDirectoryService = new EmployeeDirectoryService(
       EMPLOYEE_DIRECTORY_CSV_PATH || undefined
     );
-    const validationService = new ValidationService(
-      nominationRepository,
-      azureEmployeeService
+    const votingGroupService = new VotingGroupService(
+      VOTING_GROUP_STRATEGY as VotingGroupStrategy,
+      VOTING_GROUP_CUSTOM_MAPPINGS || undefined
     );
+    const validationService = new ValidationService(nominationRepository, employeeRepository);
     const notificationService = new NotificationService();
     const employeeSyncService = new EmployeeSyncService(
       azureEmployeeService,
       employeeRepository,
-      employeeDirectoryService
+      employeeDirectoryService,
+      votingGroupService
     );
     const votingService = new VotingService(
       nominationRepository,
       votingPeriodRepository,
       azureEmployeeService,
       validationService,
-      notificationService
+      notificationService,
+      employeeService
     );
+    const authService = new AuthService(employeeRepository);
 
     dependencies = {
       cosmosClient,
@@ -89,6 +97,8 @@ export async function getDependencies(): Promise<Dependencies> {
       validationService,
       notificationService,
       employeeDirectoryService,
+      votingGroupService,
+      authService,
     };
   }
 

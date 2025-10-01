@@ -1,14 +1,9 @@
-import {
-  app,
-  HttpRequest,
-  HttpResponseInit,
-  InvocationContext,
-} from "@azure/functions";
-import { CreateNominationDto } from "./dto/create-nomination.dto";
-import { UpdateNominationDto } from "./dto/update-nomination.dto";
-import { ResponseHelper } from "../../common/utils/ResponseHelper";
-import { getDependencies } from "../../common/utils/Dependencies";
-import { AuthHelper } from "../../common/utils/AuthHelper";
+import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
+import { CreateNominationDto } from './dto/create-nomination.dto';
+import { UpdateNominationDto } from './dto/update-nomination.dto';
+import { ResponseHelper } from '../../common/utils/ResponseHelper';
+import { getDependencies } from '../../common/utils/Dependencies';
+import { AuthHelper } from '../../common/utils/AuthHelper';
 
 export class VotingController {
   private dependencies: any;
@@ -22,7 +17,7 @@ export class VotingController {
     context: InvocationContext
   ): Promise<HttpResponseInit> {
     try {
-      if (request.method !== "POST") {
+      if (request.method !== 'POST') {
         return ResponseHelper.methodNotAllowed();
       }
 
@@ -44,7 +39,7 @@ export class VotingController {
         !nominationData.criteria
       ) {
         return ResponseHelper.badRequest(
-          "Missing required fields: nominatedEmployeeId, reason, criteria"
+          'Missing required fields: nominatedEmployeeId, reason, criteria'
         );
       }
 
@@ -52,7 +47,7 @@ export class VotingController {
       context.log(`User ${user.email} created nomination:`, nomination.id);
       return ResponseHelper.created(nomination);
     } catch (error) {
-      context.error("Error creating nomination:", error);
+      context.error('Error creating nomination:', error);
       if (error instanceof Error) {
         return ResponseHelper.badRequest(error.message);
       }
@@ -65,7 +60,7 @@ export class VotingController {
     context: InvocationContext
   ): Promise<HttpResponseInit> {
     try {
-      if (request.method !== "PUT") {
+      if (request.method !== 'PUT') {
         return ResponseHelper.methodNotAllowed();
       }
 
@@ -76,14 +71,14 @@ export class VotingController {
 
       const id = request.params.id;
       if (!id) {
-        return ResponseHelper.badRequest("Nomination ID is required");
+        return ResponseHelper.badRequest('Nomination ID is required');
       }
 
       const body = (await request.json()) as UpdateNominationDto;
       const nomination = await this.dependencies.votingService.updateNomination(id, body);
       return ResponseHelper.ok(nomination);
     } catch (error) {
-      context.error("Error updating nomination:", error);
+      context.error('Error updating nomination:', error);
       if (error instanceof Error) {
         return ResponseHelper.badRequest(error.message);
       }
@@ -96,7 +91,7 @@ export class VotingController {
     context: InvocationContext
   ): Promise<HttpResponseInit> {
     try {
-      if (request.method !== "DELETE") {
+      if (request.method !== 'DELETE') {
         return ResponseHelper.methodNotAllowed();
       }
 
@@ -107,13 +102,13 @@ export class VotingController {
 
       const id = request.params.id;
       if (!id) {
-        return ResponseHelper.badRequest("Nomination ID is required");
+        return ResponseHelper.badRequest('Nomination ID is required');
       }
 
       await this.dependencies.votingService.deleteNomination(id);
-      return ResponseHelper.ok({ message: "Nomination deleted successfully" });
+      return ResponseHelper.ok({ message: 'Nomination deleted successfully' });
     } catch (error) {
-      context.error("Error deleting nomination:", error);
+      context.error('Error deleting nomination:', error);
       if (error instanceof Error) {
         return ResponseHelper.badRequest(error.message);
       }
@@ -121,12 +116,9 @@ export class VotingController {
     }
   }
 
-  async getNomination(
-    request: HttpRequest,
-    context: InvocationContext
-  ): Promise<HttpResponseInit> {
+  async getNomination(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
     try {
-      if (request.method !== "GET") {
+      if (request.method !== 'GET') {
         return ResponseHelper.methodNotAllowed();
       }
 
@@ -137,17 +129,17 @@ export class VotingController {
 
       const id = request.params.id;
       if (!id) {
-        return ResponseHelper.badRequest("Nomination ID is required");
+        return ResponseHelper.badRequest('Nomination ID is required');
       }
 
       const nomination = await this.dependencies.votingService.getNomination(id);
       if (!nomination) {
-        return ResponseHelper.notFound("Nomination not found");
+        return ResponseHelper.notFound('Nomination not found');
       }
 
       return ResponseHelper.ok(nomination);
     } catch (error) {
-      context.error("Error getting nomination:", error);
+      context.error('Error getting nomination:', error);
       return ResponseHelper.internalServerError();
     }
   }
@@ -157,7 +149,7 @@ export class VotingController {
     context: InvocationContext
   ): Promise<HttpResponseInit> {
     try {
-      if (request.method !== "GET") {
+      if (request.method !== 'GET') {
         return ResponseHelper.methodNotAllowed();
       }
 
@@ -169,17 +161,14 @@ export class VotingController {
       const voting = await this.dependencies.votingService.getCurrentVotingPeriod();
       return ResponseHelper.ok(voting);
     } catch (error) {
-      context.error("Error getting current voting:", error);
+      context.error('Error getting current voting:', error);
       return ResponseHelper.internalServerError();
     }
   }
 
-  async getAllVoting(
-    request: HttpRequest,
-    context: InvocationContext
-  ): Promise<HttpResponseInit> {
+  async getAllVoting(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
     try {
-      if (request.method !== "GET") {
+      if (request.method !== 'GET') {
         return ResponseHelper.methodNotAllowed();
       }
 
@@ -191,7 +180,7 @@ export class VotingController {
       const votings = await this.dependencies.votingService.getAllVotingPeriods();
       return ResponseHelper.ok(votings);
     } catch (error) {
-      context.error("Error getting all voting periods:", error);
+      context.error('Error getting all voting periods:', error);
       return ResponseHelper.internalServerError();
     }
   }
@@ -201,7 +190,7 @@ export class VotingController {
     context: InvocationContext
   ): Promise<HttpResponseInit> {
     try {
-      if (request.method !== "GET") {
+      if (request.method !== 'GET') {
         return ResponseHelper.methodNotAllowed();
       }
 
@@ -212,13 +201,13 @@ export class VotingController {
 
       const votingPeriodId = request.params.votingPeriodId;
       if (!votingPeriodId) {
-        return ResponseHelper.badRequest("Voting period ID is required");
+        return ResponseHelper.badRequest('Voting period ID is required');
       }
 
       const results = await this.dependencies.votingService.getVotingResults(votingPeriodId);
       return ResponseHelper.ok(results);
     } catch (error) {
-      context.error("Error getting voting results:", error);
+      context.error('Error getting voting results:', error);
       return ResponseHelper.internalServerError();
     }
   }
@@ -228,7 +217,7 @@ export class VotingController {
     context: InvocationContext
   ): Promise<HttpResponseInit> {
     try {
-      if (request.method !== "POST") {
+      if (request.method !== 'POST') {
         return ResponseHelper.methodNotAllowed();
       }
 
@@ -239,13 +228,13 @@ export class VotingController {
 
       const votingPeriodId = request.params.votingPeriodId;
       if (!votingPeriodId) {
-        return ResponseHelper.badRequest("Voting period ID is required");
+        return ResponseHelper.badRequest('Voting period ID is required');
       }
 
       const result = await this.dependencies.votingService.closeVotingPeriod(votingPeriodId);
       return ResponseHelper.ok(result);
     } catch (error) {
-      context.error("Error closing voting period:", error);
+      context.error('Error closing voting period:', error);
       if (error instanceof Error) {
         return ResponseHelper.badRequest(error.message);
       }
@@ -253,12 +242,9 @@ export class VotingController {
     }
   }
 
-  async getWinners(
-    request: HttpRequest,
-    context: InvocationContext
-  ): Promise<HttpResponseInit> {
+  async getWinners(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
     try {
-      if (request.method !== "GET") {
+      if (request.method !== 'GET') {
         return ResponseHelper.methodNotAllowed();
       }
 
@@ -270,7 +256,37 @@ export class VotingController {
       const winners = await this.dependencies.votingService.getWinners();
       return ResponseHelper.ok(winners);
     } catch (error) {
-      context.error("Error getting winners:", error);
+      context.error('Error getting winners:', error);
+      return ResponseHelper.internalServerError();
+    }
+  }
+
+  async getMyNominations(
+    request: HttpRequest,
+    context: InvocationContext
+  ): Promise<HttpResponseInit> {
+    try {
+      if (request.method !== 'GET') {
+        return ResponseHelper.methodNotAllowed();
+      }
+
+      const authResult = await AuthHelper.requireAuth(request, context);
+      if (!authResult.success) {
+        return authResult.response;
+      }
+      const user = authResult.user;
+
+      const nomination = await this.dependencies.votingService.getMyNominations(user.email);
+
+      if (!nomination) {
+        return ResponseHelper.notFound(
+          'No nomination found for the current user in the active voting period'
+        );
+      }
+
+      return ResponseHelper.ok(nomination);
+    } catch (error) {
+      context.error('Error getting my nominations:', error);
       return ResponseHelper.internalServerError();
     }
   }
@@ -294,16 +310,16 @@ const nominationByIdFunction = async (
   const controller = new VotingController(dependencies);
 
   switch (request.method) {
-    case "GET":
+    case 'GET':
       return controller.getNomination(request, context);
-    case "PUT":
+    case 'PUT':
       return controller.updateNomination(request, context);
-    case "DELETE":
+    case 'DELETE':
       return controller.deleteNomination(request, context);
     default:
       return {
         status: 405,
-        jsonBody: { message: "Method not allowed" }
+        jsonBody: { message: 'Method not allowed' },
       };
   }
 };
@@ -353,52 +369,68 @@ const getWinnersFunction = async (
   return controller.getWinners(request, context);
 };
 
+const getMyNominationsFunction = async (
+  request: HttpRequest,
+  context: InvocationContext
+): Promise<HttpResponseInit> => {
+  const dependencies = await getDependencies();
+  const controller = new VotingController(dependencies);
+  return controller.getMyNominations(request, context);
+};
+
 // Register Azure Functions
-app.http("create-nomination", {
-  methods: ["POST", "OPTIONS"],
-  authLevel: "anonymous",
-  route: "nominations",
+app.http('create-nomination', {
+  methods: ['POST', 'OPTIONS'],
+  authLevel: 'anonymous',
+  route: 'nominations',
   handler: createNominationFunction,
 });
 
-app.http("nomination-by-id", {
-  methods: ["GET", "PUT", "DELETE", "OPTIONS"],
-  authLevel: "anonymous",
-  route: "nominations/{id}",
+app.http('nomination-by-id', {
+  methods: ['GET', 'PUT', 'DELETE', 'OPTIONS'],
+  authLevel: 'anonymous',
+  route: 'nominations/{id}',
   handler: nominationByIdFunction,
 });
 
-app.http("get-current-voting", {
-  methods: ["GET", "OPTIONS"],
-  authLevel: "anonymous",
-  route: "voting/current",
+app.http('get-current-voting', {
+  methods: ['GET', 'OPTIONS'],
+  authLevel: 'anonymous',
+  route: 'voting/current',
   handler: getCurrentVotingFunction,
 });
 
-app.http("get-all-voting", {
-  methods: ["GET", "OPTIONS"],
-  authLevel: "anonymous",
-  route: "voting",
+app.http('get-all-voting', {
+  methods: ['GET', 'OPTIONS'],
+  authLevel: 'anonymous',
+  route: 'voting',
   handler: getAllVotingFunction,
 });
 
-app.http("get-voting-results", {
-  methods: ["GET", "OPTIONS"],
-  authLevel: "anonymous",
-  route: "voting/{votingPeriodId}/results",
+app.http('get-voting-results', {
+  methods: ['GET', 'OPTIONS'],
+  authLevel: 'anonymous',
+  route: 'voting/{votingPeriodId}/results',
   handler: getVotingResultsFunction,
 });
 
-app.http("close-voting-period", {
-  methods: ["POST", "OPTIONS"],
-  authLevel: "anonymous",
-  route: "voting/{votingPeriodId}/close",
+app.http('close-voting-period', {
+  methods: ['POST', 'OPTIONS'],
+  authLevel: 'anonymous',
+  route: 'voting/{votingPeriodId}/close',
   handler: closeVotingPeriodFunction,
 });
 
-app.http("get-winners", {
-  methods: ["GET", "OPTIONS"],
-  authLevel: "anonymous",
-  route: "voting/winners",
+app.http('get-winners', {
+  methods: ['GET', 'OPTIONS'],
+  authLevel: 'anonymous',
+  route: 'voting/winners',
   handler: getWinnersFunction,
+});
+
+app.http('get-my-nominations', {
+  methods: ['GET', 'OPTIONS'],
+  authLevel: 'anonymous',
+  route: 'nominations/my',
+  handler: getMyNominationsFunction,
 });

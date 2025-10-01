@@ -1,13 +1,14 @@
-import { Nomination, NominationWithEmployee } from './models/Nomination';
-import { CreateNominationDto, Criteria } from '../modules/voting/dto/create-nomination.dto';
-import { UpdateNominationDto } from '../modules/voting/dto/update-nomination.dto';
-import { VotingPeriod, VotingPeriodStatus } from './models/VotingPeriod';
-import { VoteResult, VotingPeriodResults } from './models/VoteResult';
-import { NominationRepository } from '../modules/voting/repositories/NominationRepository';
-import { VotingPeriodRepository } from '../modules/voting/repositories/VotingPeriodRepository';
-import { AzureEmployeeService } from './AzureEmployeeService';
+import { Nomination, NominationWithEmployee } from '../../../common/models/Nomination';
+import { CreateNominationDto, Criteria } from '../dto/create-nomination.dto';
+import { UpdateNominationDto } from '../dto/update-nomination.dto';
+import { VotingPeriod, VotingPeriodStatus } from '../../../common/models/VotingPeriod';
+import { VoteResult, VotingPeriodResults } from '../../../common/models/VoteResult';
+import { NominationRepository } from '../repositories/NominationRepository';
+import { VotingPeriodRepository } from '../repositories/VotingPeriodRepository';
+import { AzureEmployeeService } from '../../../common/AzureEmployeeService';
 import { ValidationService } from './ValidationService';
 import { NotificationService } from './NotificationService';
+import { EmployeeService } from '../../employee/employee.service';
 
 export class VotingService {
   private nominationRepository: NominationRepository;
@@ -15,19 +16,22 @@ export class VotingService {
   private azureEmployeeService: AzureEmployeeService;
   private validationService: ValidationService;
   private notificationService: NotificationService;
+  private employeeService: EmployeeService;
 
   constructor(
     nominationRepository: NominationRepository,
     votingPeriodRepository: VotingPeriodRepository,
     azureEmployeeService: AzureEmployeeService,
     validationService: ValidationService,
-    notificationService: NotificationService
+    notificationService: NotificationService,
+    employeeService: EmployeeService
   ) {
     this.nominationRepository = nominationRepository;
     this.votingPeriodRepository = votingPeriodRepository;
     this.azureEmployeeService = azureEmployeeService;
     this.validationService = validationService;
     this.notificationService = notificationService;
+    this.employeeService = employeeService;
   }
 
   async createNomination(nominationData: CreateNominationDto): Promise<Nomination> {
@@ -48,7 +52,7 @@ export class VotingService {
     const createdNomination = await this.nominationRepository.create(nomination);
 
     try {
-      const nominatedEmployee = await this.azureEmployeeService.getEmployeeById(
+      const nominatedEmployee = await this.employeeService.getEmployeeById(
         nominationData.nominatedEmployeeId
       );
 
@@ -83,9 +87,7 @@ export class VotingService {
     const nominationsWithEmployee: NominationWithEmployee[] = [];
 
     for (const nomination of nominations) {
-      const employee = await this.azureEmployeeService.getEmployeeById(
-        nomination.nominatedEmployeeId
-      );
+      const employee = await this.employeeService.getEmployeeById(nomination.nominatedEmployeeId);
 
       nominationsWithEmployee.push({
         ...nomination,
@@ -115,7 +117,7 @@ export class VotingService {
     const totalNominations = nominations.length;
     const totalVotes = employeeVotes.reduce((sum, vote) => sum + vote.count, 0);
 
-    const totalEmployees = await this.azureEmployeeService.getEmployeeCount();
+    const totalEmployees = await this.employeeService.getEmployeeCount();
 
     console.log(
       `Total Employees: ${totalEmployees}, Total Votes: ${totalVotes}, Total Nominations: ${totalNominations}`
@@ -127,7 +129,7 @@ export class VotingService {
 
     const results: VoteResult[] = await Promise.all(
       employeeVotes.map(async (vote, index) => {
-        const employee = await this.azureEmployeeService.getEmployeeById(vote.employeeId);
+        const employee = await this.employeeService.getEmployeeById(vote.employeeId);
         return {
           votingPeriodId,
           employeeId: vote.employeeId,
@@ -277,6 +279,35 @@ export class VotingService {
 
   async getNomination(id: string): Promise<Nomination | null> {
     return this.nominationRepository.findById(id);
+  }
+
+  async getMyNominations(nominatorEmail: string): Promise<NominationWithEmployee | null> {
+    const currentPeriod = await this.getCurrentVotingPeriod();
+    if (!currentPeriod) {
+      return null;
+    }
+
+    const nomination = await this.nominationRepository.findByNominatorEmail(
+      nominatorEmail,
+      currentPeriod.id
+    );
+
+    if (!nomination) {
+      return null;
+    }
+
+    const employee = await this.employeeService.getEmployeeById(nomination.nominatedEmployeeId);
+
+    const nominationWithEmployee: NominationWithEmployee = {
+      ...nomination,
+      nominatedEmployee: {
+        fullName: employee?.fullName || 'Unknown Employee',
+        department: employee?.department || 'Unknown',
+        position: employee?.position || 'Unknown',
+      },
+    };
+
+    return nominationWithEmployee;
   }
 
   async deleteNomination(id: string): Promise<void> {
