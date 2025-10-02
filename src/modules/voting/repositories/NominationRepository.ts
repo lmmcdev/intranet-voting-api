@@ -76,15 +76,15 @@ export class NominationRepository {
   }
 
   async findByNominatorAndPeriod(
-    nominatorEmail: string,
+    nominatorUserName: string,
     votingPeriodId: string
   ): Promise<Nomination | null> {
     const container = await this.cosmosClient.getContainer(this.containerName);
     const querySpec = {
       query:
-        'SELECT * FROM c WHERE c.nominatorEmail = @nominatorEmail AND c.votingPeriodId = @votingPeriodId',
+        'SELECT * FROM c WHERE c.nominatorUserName = @nominatorUserName AND c.votingPeriodId = @votingPeriodId',
       parameters: [
-        { name: '@nominatorEmail', value: nominatorEmail },
+        { name: '@nominatorUserName', value: nominatorUserName },
         { name: '@votingPeriodId', value: votingPeriodId },
       ],
     };
@@ -112,16 +112,16 @@ export class NominationRepository {
     return resource as Nomination;
   }
 
-  async findByNominatorEmail(
-    nominatorEmail: string,
+  async findByNominatorUsername(
+    nominatorUserName: string,
     votingPeriodId: string
   ): Promise<Nomination | null> {
     const container = await this.cosmosClient.getContainer(this.containerName);
     const querySpec = {
       query:
-        'SELECT * FROM c WHERE c.nominatorEmail = @nominatorEmail AND c.votingPeriodId = @votingPeriodId',
+        'SELECT * FROM c WHERE c.nominatorUserName = @nominatorUserName AND c.votingPeriodId = @votingPeriodId',
       parameters: [
-        { name: '@nominatorEmail', value: nominatorEmail },
+        { name: '@nominatorUserName', value: nominatorUserName },
         { name: '@votingPeriodId', value: votingPeriodId },
       ],
     };

@@ -30,7 +30,8 @@ export class VotingController {
       const body = (await request.json()) as CreateNominationDto;
       const nominationData = {
         ...body,
-        nominatorEmail: user.email,
+        nominatorUserName: user.username,
+        nominatorUserId: user.userId,
       };
 
       if (
@@ -276,7 +277,7 @@ export class VotingController {
       }
       const user = authResult.user;
 
-      const nomination = await this.dependencies.votingService.getMyNominations(user.email);
+      const nomination = await this.dependencies.votingService.getMyNominations(user.username);
 
       if (!nomination) {
         return ResponseHelper.notFound(

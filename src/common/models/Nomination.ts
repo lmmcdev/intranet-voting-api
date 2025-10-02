@@ -3,7 +3,8 @@ import { Criteria } from '../../modules/voting/dto/create-nomination.dto';
 export interface Nomination {
   id: string;
   nominatedEmployeeId: string;
-  nominatorEmail: string;
+  nominatorUserName: string;
+  nominatorUserId: string;
   votingPeriodId: string;
   reason: string;
   criteria: Criteria;
