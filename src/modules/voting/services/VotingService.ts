@@ -40,11 +40,19 @@ export class VotingService {
       throw new Error('No active voting period found');
     }
 
+    if (!nominationData.nominatorUserName || !nominationData.nominatorUserId) {
+      throw new Error('Nominator information is required');
+    }
+
     await this.validationService.validateNomination(nominationData, currentPeriod.id);
 
     const nomination: Nomination = {
       id: this.generateId(),
-      ...nominationData,
+      nominatedEmployeeId: nominationData.nominatedEmployeeId,
+      nominatorUserName: nominationData.nominatorUserName,
+      nominatorUserId: nominationData.nominatorUserId,
+      reason: nominationData.reason,
+      criteria: nominationData.criteria,
       votingPeriodId: currentPeriod.id,
       createdAt: new Date(),
     };
@@ -58,7 +66,7 @@ export class VotingService {
 
       if (nominatedEmployee) {
         await this.notificationService.sendNominationNotification(
-          nominationData.nominatorEmail,
+          nominationData.nominatorUserName,
           nominatedEmployee.fullName || 'Unknown Employee',
           nominatedEmployee.department,
           currentPeriod,
@@ -206,7 +214,7 @@ export class VotingService {
   }
 
   async updateNomination(
-    nominatorEmail: string,
+    nominatorUserName: string,
     updateData: UpdateNominationDto
   ): Promise<Nomination> {
     const currentPeriod = await this.getCurrentVotingPeriod();
@@ -214,9 +222,9 @@ export class VotingService {
       throw new Error('No active voting period found');
     }
 
-    // Find existing nomination by nominator email and current voting period
-    const existingNomination = await this.nominationRepository.findByNominatorEmail(
-      nominatorEmail,
+    // Find existing nomination by nominator username and current voting period
+    const existingNomination = await this.nominationRepository.findByNominatorUsername(
+      nominatorUserName,
       currentPeriod.id
     );
     if (!existingNomination) {
@@ -230,7 +238,8 @@ export class VotingService {
       // Check for self-nomination
       const updateNominationData: CreateNominationDto = {
         nominatedEmployeeId: updateData.nominatedEmployeeId,
-        nominatorEmail: nominatorEmail,
+        nominatorUserName: existingNomination.nominatorUserName,
+        nominatorUserId: existingNomination.nominatorUserId,
         reason: updateData.reason || existingNomination.reason,
         criteria: updateData.criteria || existingNomination.criteria,
       };
@@ -281,14 +290,14 @@ export class VotingService {
     return this.nominationRepository.findById(id);
   }
 
-  async getMyNominations(nominatorEmail: string): Promise<NominationWithEmployee | null> {
+  async getMyNominations(nominatorUserName: string): Promise<NominationWithEmployee | null> {
     const currentPeriod = await this.getCurrentVotingPeriod();
     if (!currentPeriod) {
       return null;
     }
 
-    const nomination = await this.nominationRepository.findByNominatorEmail(
-      nominatorEmail,
+    const nomination = await this.nominationRepository.findByNominatorUsername(
+      nominatorUserName,
       currentPeriod.id
     );
 

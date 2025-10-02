@@ -9,7 +9,8 @@ export interface Criteria {
 
 export interface CreateNominationDto {
   nominatedEmployeeId: string;
-  nominatorEmail: string;
+  nominatorUserName?: string;
+  nominatorUserId?: string;
   reason: string;
   criteria: Criteria;
 }

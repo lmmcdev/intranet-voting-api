@@ -17,7 +17,9 @@ export class ValidationService {
     votingPeriodId: string
   ): Promise<void> {
     await this.validateEmployee(nominationData.nominatedEmployeeId);
-    await this.validateNominator(nominationData.nominatorEmail);
+    if (nominationData.nominatorUserName) {
+      await this.validateNominator(nominationData.nominatorUserName);
+    }
     await this.validateNominationReason(nominationData.reason);
     this.validateCriteria(nominationData.criteria);
     await this.validateDuplicateNomination(nominationData, votingPeriodId);
@@ -34,17 +36,14 @@ export class ValidationService {
     }
   }
 
-  private async validateNominator(nominatorEmail: string): Promise<void> {
-    if (!this.isValidEmail(nominatorEmail)) {
-      throw new Error('Invalid nominator email format');
-    }
+  private async validateNominator(nominatorUserName: string): Promise<void> {
     // validate nominator and nominated are on the same votingGroup
     // Skip nominator validation when SKIP_AUTH is enabled (for development)
     if (process.env.SKIP_AUTH === 'true') {
       return; // Allow any email in development
     }
 
-    const nominator = await this.employeeRepository.findByEmail(nominatorEmail);
+    const nominator = await this.employeeRepository.findByUsername(nominatorUserName);
     if (!nominator) {
       throw new Error('Nominator must be an active employee');
     }
@@ -104,8 +103,11 @@ export class ValidationService {
     nominationData: CreateNominationDto,
     votingPeriodId: string
   ): Promise<void> {
+    if (!nominationData.nominatorUserName) {
+      return;
+    }
     const existingNomination = await this.nominationRepository.findByNominatorAndPeriod(
-      nominationData.nominatorEmail,
+      nominationData.nominatorUserName,
       votingPeriodId
     );
     if (existingNomination) {
@@ -114,10 +116,13 @@ export class ValidationService {
   }
 
   async validateSelfNomination(nominationData: CreateNominationDto): Promise<void> {
+    if (!nominationData.nominatorUserName) {
+      return;
+    }
     const nominatedEmployee = await this.employeeRepository.findById(
       nominationData.nominatedEmployeeId
     );
-    if (nominatedEmployee && nominatedEmployee.email === nominationData.nominatorEmail) {
+    if (nominatedEmployee && nominatedEmployee.username === nominationData.nominatorUserName) {
       throw new Error('No puedes nominarte a ti mismo / Self-nomination is not allowed');
     }
   }
