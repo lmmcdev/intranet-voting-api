@@ -1,8 +1,13 @@
 import { Employee } from './models/employee.model';
 import { EmployeeRepository } from './repositories/EmployeeRepository';
+import { EligibilityHelper } from '../../common/utils/EligibilityHelper';
+import { ConfigurationService } from '../configuration/configuration.service';
 
 export class EmployeeService {
-  constructor(private readonly employeeRepository: EmployeeRepository) {}
+  constructor(
+    private readonly employeeRepository: EmployeeRepository,
+    private readonly configurationService?: ConfigurationService
+  ) {}
 
   async getEmployees(filters?: {
     isActive?: boolean;
@@ -92,5 +97,30 @@ export class EmployeeService {
 
   async getEmployeeByEmail(email: string): Promise<Employee | null> {
     return this.employeeRepository.findByEmail(email);
+  }
+
+  async getEligibleEmployees(filters?: {
+    department?: string;
+    position?: string;
+    location?: string;
+    votingGroup?: string;
+  }): Promise<Employee[]> {
+    if (!this.configurationService) {
+      throw new Error('ConfigurationService is required for eligibility filtering');
+    }
+
+    // Get all active employees with optional filters
+    const allEmployees = await this.employeeRepository.findAll({
+      ...filters,
+      isActive: true,
+    });
+
+    // Get eligibility configuration
+    const eligibilityConfig = await this.configurationService.getEligibilityConfig();
+
+    // Filter employees using EligibilityHelper
+    return allEmployees.filter(employee =>
+      EligibilityHelper.isVotingEligible(employee, eligibilityConfig)
+    );
   }
 }
