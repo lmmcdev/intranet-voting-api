@@ -1,19 +1,13 @@
-import {
-  app,
-  HttpRequest,
-  HttpResponseInit,
-  InvocationContext,
-} from "@azure/functions";
+import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
+import { Public } from '../auth/decorators/auth.decorators';
 
 export class HealthController {
-  async getHealth(
-    request: HttpRequest,
-    context: InvocationContext
-  ): Promise<HttpResponseInit> {
-    context.log("Health check endpoint called");
+  @Public()
+  async getHealth(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+    context.log('Health check endpoint called');
     return {
       status: 200,
-      jsonBody: { status: "ok" },
+      jsonBody: { status: 'ok' },
     };
   }
 }
@@ -27,8 +21,8 @@ const healthFunction = async (
   return controller.getHealth(request, context);
 };
 
-app.http("health", {
-  methods: ["GET"],
-  authLevel: "anonymous",
+app.http('health', {
+  methods: ['GET'],
+  authLevel: 'anonymous',
   handler: healthFunction,
 });

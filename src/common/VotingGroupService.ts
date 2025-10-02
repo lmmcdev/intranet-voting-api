@@ -4,7 +4,7 @@ export type VotingGroupStrategy = 'location' | 'department' | 'custom';
 
 interface VotingGroupConfig {
   strategy: VotingGroupStrategy;
-  customMappings?: Record<string, string>; // For custom mapping: { "location1,location2": "Group A" }
+  customMappings?: Record<string, string>;
 }
 
 export class VotingGroupService {
@@ -18,13 +18,14 @@ export class VotingGroupService {
       try {
         const mappings = JSON.parse(customMappingsJson);
         Object.entries(mappings).forEach(([keys, group]) => {
-          // Support comma-separated keys mapping to same group
           const keyList = keys.split(',').map(k => k.trim().toLowerCase());
           keyList.forEach(key => {
             this.customMappings.set(key, group as string);
           });
         });
-        console.log(`[VotingGroupService] Loaded ${this.customMappings.size} custom voting group mappings`);
+        console.log(
+          `[VotingGroupService] Loaded ${this.customMappings.size} custom voting group mappings`
+        );
       } catch (error) {
         console.error('[VotingGroupService] Failed to parse custom mappings:', error);
       }
@@ -97,7 +98,9 @@ export class VotingGroupService {
             this.customMappings.set(key, group as string);
           });
         });
-        console.log(`[VotingGroupService] Updated with ${this.customMappings.size} custom voting group mappings`);
+        console.log(
+          `[VotingGroupService] Updated with ${this.customMappings.size} custom voting group mappings`
+        );
       } catch (error) {
         console.error('[VotingGroupService] Failed to parse custom mappings:', error);
         throw new Error('Invalid JSON format for custom mappings');

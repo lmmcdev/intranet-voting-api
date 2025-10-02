@@ -5,7 +5,7 @@ export class EligibilityHelper {
    * @param rehireDate - Rehire date (takes priority if present)
    * @returns true if employee has been with company for more than 1 year
    */
-  static isVotingEligible(hireDate?: Date, rehireDate?: Date): boolean {
+  static isVotingEligible(hireDate?: Date, rehireDate?: Date, jobTitle?: string): boolean {
     // Use rehireDate if available, otherwise use hireDate
     const dateToCheck = rehireDate || hireDate;
 
