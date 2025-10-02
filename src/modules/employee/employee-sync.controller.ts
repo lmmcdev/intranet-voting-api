@@ -3,6 +3,7 @@ import { EmployeeSyncService } from '../../common/EmployeeSyncService';
 import { ResponseHelper } from '../../common/utils/ResponseHelper';
 import { getDependencies } from '../../common/utils/Dependencies';
 import { AuthHelper } from '../../common/utils/AuthHelper';
+import { VotingGroupConfig } from '../configuration/models/voting-group-config.model';
 
 export class EmployeeSyncController {
   private employeeSyncService: EmployeeSyncService;
@@ -128,11 +129,8 @@ export class EmployeeSyncController {
         return authResult.response;
       }
 
-      // Parse request body
-      const body = (await request.json()) as {
-        strategy: string;
-        customMappings?: string;
-      };
+      // Parse request body - now expects VotingGroupConfig
+      const body = (await request.json()) as VotingGroupConfig;
 
       if (!body.strategy) {
         return ResponseHelper.badRequest('Strategy is required');
@@ -146,21 +144,9 @@ export class EmployeeSyncController {
         );
       }
 
-      // Validate custom mappings if strategy is custom
-      if (body.strategy === 'custom' && body.customMappings) {
-        try {
-          JSON.parse(body.customMappings);
-        } catch (error) {
-          return ResponseHelper.badRequest('Invalid JSON format for customMappings');
-        }
-      }
+      context.log('Updating voting groups with config:', body);
 
-      context.log('Updating voting groups with strategy:', body.strategy);
-
-      const updateResult = await this.employeeSyncService.updateVotingGroups(
-        body.strategy,
-        body.customMappings
-      );
+      const updateResult = await this.employeeSyncService.updateVotingGroups(body);
 
       if (updateResult.success) {
         context.log(`Voting groups updated: ${updateResult.totalUpdated} employees modified`);

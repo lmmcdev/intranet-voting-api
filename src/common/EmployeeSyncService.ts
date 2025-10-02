@@ -6,6 +6,7 @@ import {
   EmployeeDirectoryService,
 } from '../modules/employee/services/EmployeeDirectoryService';
 import { VotingGroupService } from './VotingGroupService';
+import { VotingGroupConfig } from '../modules/configuration/models/voting-group-config.model';
 import { PasswordHelper } from './utils/PasswordHelper';
 import { DEFAULT_INITIAL_PASSWORD } from '../config/env.config';
 
@@ -60,7 +61,8 @@ export class EmployeeSyncService {
       }
 
       // Step 4: Sync to database
-      const existingEmployees = await this.employeeRepository.findSyncableEmployees();
+      // Get ALL existing employees (including inactive) to properly detect duplicates
+      const existingEmployees = await this.employeeRepository.findAll({ isActive: undefined });
       const existingEmployeeMap = new Map<string, Employee>();
       existingEmployees.forEach(emp => existingEmployeeMap.set(emp.id, emp));
 
@@ -110,7 +112,7 @@ export class EmployeeSyncService {
           }
 
           if (!existingEmployee) {
-            await this.employeeRepository.create(employee);
+            await this.employeeRepository.upsert(employee);
             result.newUsers++;
           } else if (this.hasEmployeeChanged(existingEmployee, employee)) {
             const updatedEmployee = {
@@ -119,7 +121,7 @@ export class EmployeeSyncService {
               updatedAt: new Date(),
               password: existingEmployee.password, // Preserve existing password
             };
-            await this.employeeRepository.update(employee.id, updatedEmployee);
+            await this.employeeRepository.upsert(updatedEmployee);
             result.updatedUsers++;
           }
         } catch (error) {
@@ -276,8 +278,7 @@ export class EmployeeSyncService {
   }
 
   async updateVotingGroups(
-    strategy: string,
-    customMappings?: string
+    config: VotingGroupConfig
   ): Promise<{
     success: boolean;
     totalUpdated: number;
@@ -295,7 +296,7 @@ export class EmployeeSyncService {
         throw new Error('VotingGroupService not configured');
       }
 
-      this.votingGroupService.updateConfiguration(strategy as any, customMappings);
+      this.votingGroupService.updateConfiguration(config);
 
       // Get all active employees
       const employees = await this.employeeRepository.findSyncableEmployees();

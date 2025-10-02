@@ -2,22 +2,23 @@ import { CosmosClient } from './CosmosClient';
 import { EmployeeRepository } from '../../modules/employee/repositories/EmployeeRepository';
 import { NominationRepository } from '../../modules/voting/repositories/NominationRepository';
 import { VotingPeriodRepository } from '../../modules/voting/repositories/VotingPeriodRepository';
+import { EligibilityConfigRepository } from '../../modules/configuration/repositories/EligibilityConfigRepository';
+import { VotingGroupConfigRepository } from '../../modules/configuration/repositories/VotingGroupConfigRepository';
 import { EmployeeDirectoryService } from '../../modules/employee/services/EmployeeDirectoryService';
 import { EmployeeService } from '../../modules/employee/employee.service';
 import { AzureEmployeeService } from '../AzureEmployeeService';
 import { EmployeeSyncService } from '../EmployeeSyncService';
-import { VotingGroupService, VotingGroupStrategy } from '../VotingGroupService';
+import { VotingGroupService } from '../VotingGroupService';
 import { VotingService } from '../../modules/voting/services/VotingService';
 import { ValidationService } from '../../modules/voting/services/ValidationService';
 import { NotificationService } from '../../modules/voting/services/NotificationService';
+import { ConfigurationService } from '../../modules/configuration/configuration.service';
 import { AuthService } from '../../modules/auth/auth.service';
 import {
   COSMOS_DB_ENDPOINT,
   COSMOS_DB_KEY,
   COSMOS_DB_NAME,
   EMPLOYEE_DIRECTORY_CSV_PATH,
-  VOTING_GROUP_STRATEGY,
-  VOTING_GROUP_CUSTOM_MAPPINGS,
 } from '../../config/env.config';
 
 interface Dependencies {
@@ -25,6 +26,8 @@ interface Dependencies {
   employeeRepository: EmployeeRepository;
   nominationRepository: NominationRepository;
   votingPeriodRepository: VotingPeriodRepository;
+  eligibilityConfigRepository: EligibilityConfigRepository;
+  votingGroupConfigRepository: VotingGroupConfigRepository;
   employeeService: EmployeeService;
   azureEmployeeService: AzureEmployeeService;
   employeeSyncService: EmployeeSyncService;
@@ -33,6 +36,7 @@ interface Dependencies {
   notificationService: NotificationService;
   employeeDirectoryService: EmployeeDirectoryService;
   votingGroupService: VotingGroupService;
+  configurationService: ConfigurationService;
   authService: AuthService;
 }
 
@@ -57,16 +61,22 @@ export async function getDependencies(): Promise<Dependencies> {
     const employeeRepository = new EmployeeRepository(cosmosClient);
     const nominationRepository = new NominationRepository(cosmosClient);
     const votingPeriodRepository = new VotingPeriodRepository(cosmosClient);
+    const eligibilityConfigRepository = new EligibilityConfigRepository(cosmosClient);
+    const votingGroupConfigRepository = new VotingGroupConfigRepository(cosmosClient);
 
     const employeeService = new EmployeeService(employeeRepository);
     const azureEmployeeService = new AzureEmployeeService();
+
+    // Load configurations from database
+    const eligibilityConfig = await eligibilityConfigRepository.getConfig();
+    const votingGroupConfig = await votingGroupConfigRepository.getConfig();
+
     const employeeDirectoryService = new EmployeeDirectoryService(
-      EMPLOYEE_DIRECTORY_CSV_PATH || undefined
+      EMPLOYEE_DIRECTORY_CSV_PATH || undefined,
+      eligibilityConfig
     );
-    const votingGroupService = new VotingGroupService(
-      VOTING_GROUP_STRATEGY as VotingGroupStrategy,
-      VOTING_GROUP_CUSTOM_MAPPINGS || undefined
-    );
+    const votingGroupService = new VotingGroupService(votingGroupConfig);
+
     const validationService = new ValidationService(nominationRepository, employeeRepository);
     const notificationService = new NotificationService();
     const employeeSyncService = new EmployeeSyncService(
@@ -83,6 +93,10 @@ export async function getDependencies(): Promise<Dependencies> {
       notificationService,
       employeeService
     );
+    const configurationService = new ConfigurationService(
+      eligibilityConfigRepository,
+      votingGroupConfigRepository
+    );
     const authService = new AuthService(employeeRepository);
 
     dependencies = {
@@ -90,6 +104,8 @@ export async function getDependencies(): Promise<Dependencies> {
       employeeRepository,
       nominationRepository,
       votingPeriodRepository,
+      eligibilityConfigRepository,
+      votingGroupConfigRepository,
       employeeService,
       azureEmployeeService,
       employeeSyncService,
@@ -98,11 +114,12 @@ export async function getDependencies(): Promise<Dependencies> {
       notificationService,
       employeeDirectoryService,
       votingGroupService,
+      configurationService,
       authService,
     };
   }
 
-  return dependencies;
+  return dependencies!;
 }
 
 export function resetDependencies(): void {

@@ -7,3 +7,4 @@ import '../modules/voting/voting.controller';
 import '../modules/voting/voting-diagnostic.controller';
 import '../modules/admin/admin.controller';
 import '../modules/auth/auth.controller';
+import '../modules/configuration/configuration.controller';

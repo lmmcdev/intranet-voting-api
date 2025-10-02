@@ -115,8 +115,8 @@ export class AuthController {
         return ResponseHelper.badRequest('Old password and new password are required');
       }
 
-      if (body.newPassword.length < 8) {
-        return ResponseHelper.badRequest('New password must be at least 8 characters');
+      if (body.newPassword.length < 7) {
+        return ResponseHelper.badRequest('New password must be at least 7 characters');
       }
 
       context.log(`Password change attempt for user: ${payload.userId}`);

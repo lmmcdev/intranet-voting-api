@@ -84,6 +84,12 @@ export class EmployeeRepository {
     return resource as Employee;
   }
 
+  async upsert(employee: Employee): Promise<Employee> {
+    const container = await this.cosmosClient.getContainer(this.containerName);
+    const { resource } = await container.items.upsert<Employee>(employee);
+    return resource as Employee;
+  }
+
   async partialUpdate(id: string, updates: Partial<Employee>): Promise<Employee | null> {
     try {
       const existingEmployee = await this.findById(id);
