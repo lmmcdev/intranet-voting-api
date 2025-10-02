@@ -1,17 +1,9 @@
-// health check
-import "./health/health.route";
-
-// voting
-import "./voting/getEmployees";
-import "./voting/getEmployeeById";
-import "./voting/autocompleteEmployees";
-import "./voting/getCurrentVoting";
-import "./voting/getVotingResults";
-import "./voting/createNomination";
-import "./voting/getNomination";
-import "./voting/updateNomination";
-import "./voting/deleteNomination";
-import "./voting/getWinners";
-
-// admin
-import "./admin/setupData";
+// Import new modular structure
+import '../modules/health/health.controller';
+import '../modules/employee/employee.controller';
+import '../modules/employee/employee-sync.controller';
+import '../modules/employee/employee-diagnostic.controller';
+import '../modules/voting/voting.controller';
+import '../modules/voting/voting-diagnostic.controller';
+import '../modules/admin/admin.controller';
+import '../modules/auth/auth.controller';
