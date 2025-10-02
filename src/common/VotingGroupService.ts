@@ -1,45 +1,50 @@
 import { Employee } from '../modules/employee/models/employee.model';
-
-export type VotingGroupStrategy = 'location' | 'department' | 'custom';
-
-interface VotingGroupConfig {
-  strategy: VotingGroupStrategy;
-  customMappings?: Record<string, string>;
-}
+import {
+  VotingGroupConfig,
+  VotingGroupStrategy,
+} from '../modules/configuration/models/voting-group-config.model';
 
 export class VotingGroupService {
-  private strategy: VotingGroupStrategy;
-  private customMappings: Map<string, string> = new Map();
+  private config: VotingGroupConfig;
+  private departmentGroupMap: Map<string, string> = new Map(); // department -> group name
 
-  constructor(strategy: VotingGroupStrategy = 'location', customMappingsJson?: string) {
-    this.strategy = strategy;
+  constructor(config: VotingGroupConfig) {
+    this.config = config;
+    this.buildDepartmentGroupMap();
+    console.log(`[VotingGroupService] Initialized with strategy: ${this.config.strategy}`);
+  }
 
-    if (customMappingsJson && strategy === 'custom') {
-      try {
-        const mappings = JSON.parse(customMappingsJson);
-        Object.entries(mappings).forEach(([keys, group]) => {
-          const keyList = keys.split(',').map(k => k.trim().toLowerCase());
-          keyList.forEach(key => {
-            this.customMappings.set(key, group as string);
-          });
-        });
-        console.log(
-          `[VotingGroupService] Loaded ${this.customMappings.size} custom voting group mappings`
-        );
-      } catch (error) {
-        console.error('[VotingGroupService] Failed to parse custom mappings:', error);
+  /**
+   * Build a map from department names to their assigned voting group
+   */
+  private buildDepartmentGroupMap(): void {
+    this.departmentGroupMap.clear();
+
+    if (this.config.departmentGroupMappings) {
+      for (const mapping of this.config.departmentGroupMappings) {
+        for (const dept of mapping.departments) {
+          const normalizedDept = dept.trim().toLowerCase();
+          this.departmentGroupMap.set(normalizedDept, mapping.groupName);
+        }
       }
+      console.log(
+        `[VotingGroupService] Loaded ${this.departmentGroupMap.size} department-to-group mappings`
+      );
     }
-
-    console.log(`[VotingGroupService] Initialized with strategy: ${this.strategy}`);
   }
 
   assignVotingGroup(employee: Employee): string | undefined {
-    switch (this.strategy) {
+    switch (this.config.strategy) {
       case 'location':
         return this.normalizeValue(employee.location);
 
       case 'department':
+        // Check if department has a group mapping
+        const normalizedDept = employee.department?.trim().toLowerCase();
+        if (normalizedDept && this.departmentGroupMap.has(normalizedDept)) {
+          return this.departmentGroupMap.get(normalizedDept);
+        }
+        // Otherwise return the department itself
         return this.normalizeValue(employee.department);
 
       case 'custom':
@@ -51,20 +56,33 @@ export class VotingGroupService {
   }
 
   private getCustomGroup(employee: Employee): string | undefined {
-    // Try location first
-    const locationKey = this.normalizeValue(employee.location)?.toLowerCase();
-    if (locationKey && this.customMappings.has(locationKey)) {
-      return this.customMappings.get(locationKey);
+    // First check department group mappings
+    const normalizedDept = employee.department?.trim().toLowerCase();
+    if (normalizedDept && this.departmentGroupMap.has(normalizedDept)) {
+      return this.departmentGroupMap.get(normalizedDept);
     }
 
-    // Try department
-    const deptKey = this.normalizeValue(employee.department)?.toLowerCase();
-    if (deptKey && this.customMappings.has(deptKey)) {
-      return this.customMappings.get(deptKey);
+    // Then try legacy custom mappings if they exist
+    if (this.config.customMappings) {
+      const locationKey = this.normalizeValue(employee.location)?.toLowerCase();
+      if (locationKey && this.config.customMappings[locationKey]) {
+        return this.config.customMappings[locationKey];
+      }
+
+      const deptKey = this.normalizeValue(employee.department)?.toLowerCase();
+      if (deptKey && this.config.customMappings[deptKey]) {
+        return this.config.customMappings[deptKey];
+      }
     }
 
-    // Default to location if no custom mapping found
-    return this.normalizeValue(employee.location);
+    // Fallback strategy
+    if (this.config.fallbackStrategy === 'location') {
+      return this.normalizeValue(employee.location);
+    } else if (this.config.fallbackStrategy === 'department') {
+      return this.normalizeValue(employee.department);
+    }
+
+    return undefined;
   }
 
   private normalizeValue(value?: string): string | undefined {
@@ -81,32 +99,16 @@ export class VotingGroupService {
   }
 
   getStrategy(): VotingGroupStrategy {
-    return this.strategy;
+    return this.config.strategy;
   }
 
-  updateConfiguration(strategy: VotingGroupStrategy, customMappingsJson?: string): void {
-    this.strategy = strategy;
-    this.customMappings.clear();
+  getConfig(): VotingGroupConfig {
+    return this.config;
+  }
 
-    if (customMappingsJson && strategy === 'custom') {
-      try {
-        const mappings = JSON.parse(customMappingsJson);
-        Object.entries(mappings).forEach(([keys, group]) => {
-          // Support comma-separated keys mapping to same group
-          const keyList = keys.split(',').map(k => k.trim().toLowerCase());
-          keyList.forEach(key => {
-            this.customMappings.set(key, group as string);
-          });
-        });
-        console.log(
-          `[VotingGroupService] Updated with ${this.customMappings.size} custom voting group mappings`
-        );
-      } catch (error) {
-        console.error('[VotingGroupService] Failed to parse custom mappings:', error);
-        throw new Error('Invalid JSON format for custom mappings');
-      }
-    }
-
-    console.log(`[VotingGroupService] Configuration updated to strategy: ${this.strategy}`);
+  updateConfiguration(config: VotingGroupConfig): void {
+    this.config = config;
+    this.buildDepartmentGroupMap();
+    console.log(`[VotingGroupService] Configuration updated to strategy: ${this.config.strategy}`);
   }
 }

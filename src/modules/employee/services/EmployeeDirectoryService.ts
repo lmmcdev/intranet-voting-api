@@ -4,6 +4,7 @@ import { Employee } from '../models/employee.model';
 import { randomUUID } from 'crypto';
 import * as XLSX from 'xlsx';
 import { EligibilityHelper } from '../../../common/utils/EligibilityHelper';
+import { EligibilityConfig, DEFAULT_ELIGIBILITY_CONFIG } from '../../configuration/models/eligibility-config.model';
 
 export interface ExternalEmployeeRecord {
   id: number;
@@ -35,9 +36,11 @@ export class EmployeeDirectoryService {
   private csvPath?: string;
   private recordsCache: ExternalEmployeeRecord[] | null = null;
   private nameIndex: Map<string, ExternalEmployeeRecord[]> | null = null;
+  private eligibilityConfig: EligibilityConfig;
 
-  constructor(csvPath?: string) {
+  constructor(csvPath?: string, eligibilityConfig?: EligibilityConfig) {
     this.csvPath = csvPath;
+    this.eligibilityConfig = eligibilityConfig || DEFAULT_ELIGIBILITY_CONFIG;
   }
 
   setCsvPath(csvPath?: string): void {
@@ -55,10 +58,9 @@ export class EmployeeDirectoryService {
 
     const employees: Employee[] = records.map(record => {
       const isActive = record.positionStatus === 'A - Active' || record.positionStatus === 'A';
-      const votingEligible =
-        isActive && EligibilityHelper.isVotingEligible(record.hireDate, record.rehireDate);
 
-      return {
+      // Build employee object first for eligibility check
+      const employee: Employee = {
         id: record.positionId || randomUUID(),
         fullName: record.name,
         firstName: record.firstName,
@@ -77,12 +79,17 @@ export class EmployeeDirectoryService {
         reportsTo: record.reportsTo,
         directReportsCount: record.directReports,
         isActive,
-        votingEligible,
+        votingEligible: false, // Will be calculated below
         source: 'adp' as const,
         roles: ['user'],
         createdAt: new Date(),
         updatedAt: new Date(),
       };
+
+      // Calculate eligibility using configuration
+      employee.votingEligible = EligibilityHelper.isVotingEligible(employee, this.eligibilityConfig);
+
+      return employee;
     });
 
     return employees;
@@ -496,9 +503,8 @@ export class EmployeeDirectoryService {
 
     const hireDate = record.hireDate || employee.hireDate;
     const rehireDate = record.rehireDate || employee.rehireDate;
-    const votingEligible = isActive && EligibilityHelper.isVotingEligible(hireDate, rehireDate);
 
-    return {
+    const mergedEmployee: Employee = {
       ...employee,
       firstName: record.firstName || employee.firstName,
       lastName: record.lastName || employee.lastName,
@@ -517,8 +523,13 @@ export class EmployeeDirectoryService {
       reportsTo: record.reportsTo?.trim() || employee.reportsTo,
       directReportsCount: directReportsCount ?? employee.directReportsCount,
       isActive,
-      votingEligible,
+      votingEligible: false, // Will be calculated below
     };
+
+    // Calculate eligibility using configuration
+    mergedEmployee.votingEligible = EligibilityHelper.isVotingEligible(mergedEmployee, this.eligibilityConfig);
+
+    return mergedEmployee;
   }
 
   private preferCsvValue(csvValue?: string, azureValue?: string): string | undefined {
