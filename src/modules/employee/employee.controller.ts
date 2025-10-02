@@ -6,6 +6,8 @@ import { getDependencies } from '../../common/utils/Dependencies';
 import { AuthHelper } from '../../common/utils/AuthHelper';
 import * as fs from 'fs';
 import * as path from 'path';
+import { RequireRoles, RequireOwnership } from '../auth/decorators/auth.decorators';
+import { UserRole, Permission } from '../../common/constants/roles.constants';
 
 export class EmployeeController {
   private employeeService: EmployeeService;
@@ -34,12 +36,7 @@ export class EmployeeController {
         votingGroup?: string;
       } = {};
 
-      const emailParam = authResult.user?.email || '';
-      if (!emailParam) {
-        return ResponseHelper.unauthorized('User email not found in token');
-      }
-
-      const employee = await this.employeeService.getEmployeeByEmail(emailParam);
+      const employee = await this.employeeService.getEmployeeById(authResult.user.userId);
       if (!employee) {
         return ResponseHelper.unauthorized('Employee record not found');
       }
@@ -140,6 +137,7 @@ export class EmployeeController {
     }
   }
 
+  @RequireRoles([UserRole.ADMIN, UserRole.SUPER_ADMIN])
   async deleteAllEmployees(
     request: HttpRequest,
     context: InvocationContext
@@ -149,10 +147,10 @@ export class EmployeeController {
         return ResponseHelper.methodNotAllowed();
       }
 
-      /*   const authResult = await AuthHelper.requireAuth(request, context);
+      const authResult = await AuthHelper.requireAuth(request, context);
       if (!authResult.success) {
         return authResult.response;
-      } */
+      }
 
       const deletedCount = await this.employeeService.deleteAllEmployees();
       return ResponseHelper.ok({
