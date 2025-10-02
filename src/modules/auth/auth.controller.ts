@@ -47,7 +47,7 @@ export class AuthController {
           username: result.employee?.username,
           fullName: result.employee?.fullName,
           email: result.employee?.email,
-          role: result.employee?.role,
+          roles: result.employee?.roles,
           department: result.employee?.department,
           position: result.employee?.position,
           votingGroup: result.employee?.votingGroup,
@@ -151,7 +151,7 @@ const loginFunction = async (
 ): Promise<HttpResponseInit> => {
   const { authService } = await getDependencies();
   const controller = new AuthController(authService);
-  return controller.login(request, context);
+  return await controller.login(request, context);
 };
 
 const verifyTokenFunction = async (
