@@ -49,3 +49,11 @@ __azurite_db*__.json
 
 # mocks
 __mocks__/
+
+# VS Code settings
+.vscode/
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/settings.json
+.history/
