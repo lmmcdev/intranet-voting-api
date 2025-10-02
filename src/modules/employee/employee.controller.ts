@@ -230,6 +230,75 @@ export class EmployeeController {
     }
   }
 
+  async getEligibleEmployees(
+    request: HttpRequest,
+    context: InvocationContext
+  ): Promise<HttpResponseInit> {
+    try {
+      if (request.method !== 'GET') {
+        return ResponseHelper.methodNotAllowed();
+      }
+
+      const authResult = await AuthHelper.requireAuth(request, context);
+      if (!authResult.success) {
+        return authResult.response;
+      }
+
+      // Read query parameters
+      const filters: {
+        department?: string;
+        position?: string;
+        location?: string;
+        votingGroup?: string;
+      } = {};
+
+      context.log('Eligible employees - Looking for employee with ID:', authResult.user.userId);
+      const employee = await this.employeeService.getEmployeeById(authResult.user.userId);
+      context.log('Eligible employees - Found employee:', employee?.id);
+      if (!employee) {
+        return ResponseHelper.unauthorized('Employee record not found');
+      }
+
+      // Only allow filtering by votingGroup if the user belongs to one
+      if (!employee.roles || !employee.roles.includes('admin')) {
+        filters.votingGroup = employee.votingGroup;
+      } else {
+        const votingGroupParam = request.query.get('votingGroup');
+        if (votingGroupParam) {
+          filters.votingGroup = votingGroupParam;
+        }
+      }
+
+      const department = request.query.get('department');
+      if (department) {
+        filters.department = department;
+      }
+
+      const position = request.query.get('position');
+      if (position) {
+        filters.position = position;
+      }
+
+      const location = request.query.get('location');
+      if (location) {
+        filters.location = location;
+      }
+
+      const employees = await this.employeeService.getEligibleEmployees(filters);
+
+      // Exclude the current user from the list (can't nominate yourself)
+      const filteredEmployees = employees.filter(emp => emp.id !== authResult.user.userId);
+
+      return ResponseHelper.ok(filteredEmployees);
+    } catch (error) {
+      context.error('Error getting eligible employees:', error);
+      if (error instanceof Error) {
+        return ResponseHelper.badRequest(error.message);
+      }
+      return ResponseHelper.internalServerError();
+    }
+  }
+
   async exportEmployeesToCSV(
     request: HttpRequest,
     context: InvocationContext
@@ -410,6 +479,15 @@ const exportEmployeesToCSVFunction = async (
   return controller.exportEmployeesToCSV(request, context);
 };
 
+const getEligibleEmployeesFunction = async (
+  request: HttpRequest,
+  context: InvocationContext
+): Promise<HttpResponseInit> => {
+  const dependencies = await getDependencies();
+  const controller = new EmployeeController(dependencies.employeeService);
+  return controller.getEligibleEmployees(request, context);
+};
+
 app.http('get-employees', {
   methods: ['GET', 'OPTIONS'],
   authLevel: 'anonymous',
@@ -424,11 +502,18 @@ app.http('autocomplete-employees', {
   handler: autocompleteEmployeesFunction,
 });
 
-app.http('get-voting-groups', {
+app.http('get-eligible-employees', {
   methods: ['GET', 'OPTIONS'],
   authLevel: 'anonymous',
-  route: 'voting-groups',
-  handler: getVotingGroupsFunction,
+  route: 'eligible-employees',
+  handler: getEligibleEmployeesFunction,
+});
+
+app.http('export-employees-csv', {
+  methods: ['GET', 'OPTIONS'],
+  authLevel: 'anonymous',
+  route: 'employees/export/csv',
+  handler: exportEmployeesToCSVFunction,
 });
 
 app.http('delete-all-employees', {
@@ -445,9 +530,9 @@ app.http('employee-by-id', {
   handler: getEmployeeByIdFunction,
 });
 
-app.http('export-employees-csv', {
+app.http('get-voting-groups', {
   methods: ['GET', 'OPTIONS'],
   authLevel: 'anonymous',
-  route: 'employees/export/csv',
-  handler: exportEmployeesToCSVFunction,
+  route: 'voting-groups',
+  handler: getVotingGroupsFunction,
 });

@@ -64,7 +64,12 @@ export async function getDependencies(): Promise<Dependencies> {
     const eligibilityConfigRepository = new EligibilityConfigRepository(cosmosClient);
     const votingGroupConfigRepository = new VotingGroupConfigRepository(cosmosClient);
 
-    const employeeService = new EmployeeService(employeeRepository);
+    const configurationService = new ConfigurationService(
+      eligibilityConfigRepository,
+      votingGroupConfigRepository
+    );
+
+    const employeeService = new EmployeeService(employeeRepository, configurationService);
     const azureEmployeeService = new AzureEmployeeService();
 
     // Load configurations from database
@@ -92,10 +97,6 @@ export async function getDependencies(): Promise<Dependencies> {
       validationService,
       notificationService,
       employeeService
-    );
-    const configurationService = new ConfigurationService(
-      eligibilityConfigRepository,
-      votingGroupConfigRepository
     );
     const authService = new AuthService(employeeRepository);
 
