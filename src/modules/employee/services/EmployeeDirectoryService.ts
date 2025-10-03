@@ -627,8 +627,9 @@ export class EmployeeDirectoryService {
   private parseJobTitle(jobTitle?: string): { position?: string; code?: string } {
     if (!jobTitle) return {};
 
-    // Format: "CODE - Position"
-    const match = jobTitle.match(/^([A-Z]+)\s*-\s*(.+)$/);
+    // Format: "CODE - Position" (e.g., "TECH I - IT TECH I")
+    // Extract everything after the first " - " separator
+    const match = jobTitle.match(/^([A-Z\s]+?)\s*-\s*(.+)$/);
     if (match) {
       return {
         code: match[1].trim(),

@@ -248,7 +248,33 @@ export class VotingService {
           teamwork: Math.round((data.totalCriteria.teamwork / data.count) * 10) / 10,
         },
       }))
-      .sort((a, b) => b.count - a.count);
+      .sort((a, b) => {
+        // Sort by vote count first
+        if (b.count !== a.count) {
+          return b.count - a.count;
+        }
+
+        // In case of tie, sort by average criteria score
+        const avgA = (
+          a.averageCriteria.communication +
+          a.averageCriteria.innovation +
+          a.averageCriteria.leadership +
+          a.averageCriteria.problemSolving +
+          a.averageCriteria.reliability +
+          a.averageCriteria.teamwork
+        ) / 6;
+
+        const avgB = (
+          b.averageCriteria.communication +
+          b.averageCriteria.innovation +
+          b.averageCriteria.leadership +
+          b.averageCriteria.problemSolving +
+          b.averageCriteria.reliability +
+          b.averageCriteria.teamwork
+        ) / 6;
+
+        return avgB - avgA;
+      });
   }
 
   async updateNomination(
