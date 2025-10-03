@@ -589,6 +589,9 @@ export class EmployeeDirectoryService {
         const homeDepartmentRaw = this.cleanValue(row['HOME DEPARTMENT']);
         const { department, departmentCode } = this.parseDepartment(homeDepartmentRaw);
 
+        const locationRaw = this.cleanValue(row['LOCATION']);
+        const { location, locationCode } = this.parseLocation(locationRaw);
+
         // Parse dates
         const hireDate = this.parseDate(row['HIRE DATE']);
         const rehireDate = this.parseDate(row['REHIRE DATE']);
@@ -601,10 +604,10 @@ export class EmployeeDirectoryService {
           middleName,
           positionId: this.cleanValue(row['POSITION ID']),
           companyCode: this.cleanValue(row['COMPANY CODE']),
-          jobTitle: position,
+          jobTitle: position,  // Solo "IT Supervisor"
           homeDepartment: department,
           department: department,
-          location: this.cleanValue(row['LOCATION']),
+          location: location,  // Solo "Las Mercedes Management"
           positionStatus: this.cleanValue(row['POSITION STATUS']),
           hireDate,
           rehireDate,
@@ -649,6 +652,21 @@ export class EmployeeDirectoryService {
     }
 
     return { department };
+  }
+
+  private parseLocation(location?: string): { location?: string; locationCode?: string } {
+    if (!location) return {};
+
+    // Format: "CODE - Location Name" (e.g., "LMMAN - Las Mercedes Management")
+    const match = location.match(/^([A-Z]+)\s*-\s*(.+)$/);
+    if (match) {
+      return {
+        locationCode: match[1].trim(),
+        location: match[2].trim(),
+      };
+    }
+
+    return { location };
   }
 
   private parseDate(dateStr?: string): Date | undefined {

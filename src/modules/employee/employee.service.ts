@@ -2,11 +2,13 @@ import { Employee } from './models/employee.model';
 import { EmployeeRepository } from './repositories/EmployeeRepository';
 import { EligibilityHelper } from '../../common/utils/EligibilityHelper';
 import { ConfigurationService } from '../configuration/configuration.service';
+import { VotingGroupService } from '../../common/VotingGroupService';
 
 export class EmployeeService {
   constructor(
     private readonly employeeRepository: EmployeeRepository,
-    private readonly configurationService?: ConfigurationService
+    private readonly configurationService?: ConfigurationService,
+    private readonly votingGroupService?: VotingGroupService
   ) {}
 
   async getEmployees(filters?: {

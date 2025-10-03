@@ -254,18 +254,22 @@ export class EmployeeController {
 
       context.log('Eligible employees - Looking for employee with ID:', authResult.user.userId);
       const employee = await this.employeeService.getEmployeeById(authResult.user.userId);
-      context.log('Eligible employees - Found employee:', employee?.id);
+      context.log('Eligible employees - Found employee:', employee?.id, 'votingGroup:', employee?.votingGroup);
       if (!employee) {
         return ResponseHelper.unauthorized('Employee record not found');
       }
 
-      // Only allow filtering by votingGroup if the user belongs to one
+      // Always filter by voting group - users can only see employees in their own voting group
+      // Admins can optionally filter by a different voting group via query parameter
       if (!employee.roles || !employee.roles.includes('admin')) {
         filters.votingGroup = employee.votingGroup;
       } else {
         const votingGroupParam = request.query.get('votingGroup');
         if (votingGroupParam) {
           filters.votingGroup = votingGroupParam;
+        } else {
+          // Even admins default to their own voting group if not specified
+          filters.votingGroup = employee.votingGroup;
         }
       }
 
@@ -284,6 +288,7 @@ export class EmployeeController {
         filters.location = location;
       }
 
+      context.log('Filtering eligible employees with votingGroup:', filters.votingGroup);
       const employees = await this.employeeService.getEligibleEmployees(filters);
 
       // Exclude the current user from the list (can't nominate yourself)
