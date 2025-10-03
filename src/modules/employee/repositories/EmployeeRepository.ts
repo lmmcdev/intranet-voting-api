@@ -301,4 +301,21 @@ export class EmployeeRepository {
     const { resources } = await container.items.query<string>(querySpec).fetchAll();
     return resources;
   }
+
+  async getDistinctLocations(): Promise<string[]> {
+    const container = await this.cosmosClient.getContainer(this.containerName);
+
+    const querySpec = {
+      query: `
+        SELECT DISTINCT VALUE c.location
+        FROM c
+        WHERE IS_DEFINED(c.location) AND c.location != null AND c.location != ""
+        ORDER BY c.location
+      `,
+      parameters: [],
+    };
+
+    const { resources } = await container.items.query<string>(querySpec).fetchAll();
+    return resources;
+  }
 }

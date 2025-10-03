@@ -262,6 +262,28 @@ export class VotingController {
     }
   }
 
+  async getWinnersGrouped(
+    request: HttpRequest,
+    context: InvocationContext
+  ): Promise<HttpResponseInit> {
+    try {
+      if (request.method !== 'GET') {
+        return ResponseHelper.methodNotAllowed();
+      }
+
+      const authResult = await AuthHelper.requireAuth(request, context);
+      if (!authResult.success) {
+        return authResult.response;
+      }
+
+      const winnersGrouped = await this.dependencies.votingService.getWinnersGrouped();
+      return ResponseHelper.ok(winnersGrouped);
+    } catch (error) {
+      context.error('Error getting winners grouped:', error);
+      return ResponseHelper.internalServerError();
+    }
+  }
+
   async getMyNominations(
     request: HttpRequest,
     context: InvocationContext
@@ -370,6 +392,15 @@ const getWinnersFunction = async (
   return controller.getWinners(request, context);
 };
 
+const getWinnersGroupedFunction = async (
+  request: HttpRequest,
+  context: InvocationContext
+): Promise<HttpResponseInit> => {
+  const dependencies = await getDependencies();
+  const controller = new VotingController(dependencies);
+  return controller.getWinnersGrouped(request, context);
+};
+
 const getMyNominationsFunction = async (
   request: HttpRequest,
   context: InvocationContext
@@ -427,6 +458,13 @@ app.http('get-winners', {
   authLevel: 'anonymous',
   route: 'voting/winners',
   handler: getWinnersFunction,
+});
+
+app.http('get-winners-grouped', {
+  methods: ['GET', 'OPTIONS'],
+  authLevel: 'anonymous',
+  route: 'voting/winners/grouped',
+  handler: getWinnersGroupedFunction,
 });
 
 app.http('get-my-nominations', {

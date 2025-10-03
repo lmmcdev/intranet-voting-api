@@ -10,6 +10,7 @@ export interface VoteResult {
   percentage: number;
   rank: number;
   averageCriteria: Criteria;
+  votingGroup?: string;
 }
 
 export interface VotingPeriodResults {
@@ -23,4 +24,15 @@ export interface VotingPeriodResults {
   averageVotes: number;
   results: VoteResult[];
   winner?: VoteResult;
+  winners?: VoteResult[];
+}
+
+export interface WinnersContainer {
+  votingPeriodId: string;
+  year: number;
+  month: number;
+  winnersByGroup: {
+    votingGroup: string;
+    winner: VoteResult;
+  }[];
 }

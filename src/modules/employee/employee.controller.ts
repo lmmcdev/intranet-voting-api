@@ -8,6 +8,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { RequireRoles, RequireOwnership } from '../auth/decorators/auth.decorators';
 import { UserRole, Permission } from '../../common/constants/roles.constants';
+import {
+  BulkUpdateEmployeesRequestDto,
+  BulkUpdateByFilterDto,
+} from './dto/bulk-update-employee.dto';
 
 export class EmployeeController {
   private employeeService: EmployeeService;
@@ -41,19 +45,14 @@ export class EmployeeController {
         return ResponseHelper.unauthorized('Employee record not found');
       }
 
-      // Only allow filtering by votingGroup if the user belongs to one
-      if (!employee.roles || !employee.roles.includes('admin')) {
-        filters.votingGroup = employee.votingGroup;
-      } else {
-        const votingGroupParam = request.query.get('votingGroup');
-        if (votingGroupParam) {
-          filters.votingGroup = votingGroupParam;
-        }
+      const votingGroupParam = request.query.get('votingGroup');
+      if (votingGroupParam) {
+        filters.votingGroup = votingGroupParam;
       }
 
       const isActiveParam = request.query.get('isActive');
-      if (isActiveParam !== null) {
-        filters.isActive = isActiveParam.toLowerCase() === 'true';
+      if (isActiveParam) {
+        filters.isActive = Boolean(isActiveParam.toLowerCase() === 'true');
       }
 
       const department = request.query.get('department');
@@ -185,6 +184,28 @@ export class EmployeeController {
     }
   }
 
+  async getLocations(
+    request: HttpRequest,
+    context: InvocationContext
+  ): Promise<HttpResponseInit> {
+    try {
+      if (request.method !== 'GET') {
+        return ResponseHelper.methodNotAllowed();
+      }
+
+      const authResult = await AuthHelper.requireAuth(request, context);
+      if (!authResult.success) {
+        return authResult.response;
+      }
+
+      const locations = await this.employeeService.getLocations();
+      return ResponseHelper.ok(locations);
+    } catch (error) {
+      context.error('Error getting locations:', error);
+      return ResponseHelper.internalServerError();
+    }
+  }
+
   async updateEmployee(
     request: HttpRequest,
     context: InvocationContext
@@ -254,7 +275,12 @@ export class EmployeeController {
 
       context.log('Eligible employees - Looking for employee with ID:', authResult.user.userId);
       const employee = await this.employeeService.getEmployeeById(authResult.user.userId);
-      context.log('Eligible employees - Found employee:', employee?.id, 'votingGroup:', employee?.votingGroup);
+      context.log(
+        'Eligible employees - Found employee:',
+        employee?.id,
+        'votingGroup:',
+        employee?.votingGroup
+      );
       if (!employee) {
         return ResponseHelper.unauthorized('Employee record not found');
       }
@@ -420,6 +446,116 @@ export class EmployeeController {
       return ResponseHelper.internalServerError();
     }
   }
+
+  @RequireRoles([UserRole.ADMIN, UserRole.SUPER_ADMIN])
+  async bulkUpdateEmployees(
+    request: HttpRequest,
+    context: InvocationContext
+  ): Promise<HttpResponseInit> {
+    try {
+      if (request.method !== 'PUT') {
+        return ResponseHelper.methodNotAllowed();
+      }
+
+      const authResult = await AuthHelper.requireAuth(request, context);
+      if (!authResult.success) {
+        return authResult.response;
+      }
+
+      const body = (await request.json()) as BulkUpdateEmployeesRequestDto;
+
+      if (!body.employees || !Array.isArray(body.employees) || body.employees.length === 0) {
+        return ResponseHelper.badRequest('Request must include an array of employees to update');
+      }
+
+      context.log(`Bulk updating ${body.employees.length} employees`);
+
+      const result = await this.employeeService.bulkUpdateEmployees(body.employees);
+
+      context.log(
+        `Bulk update completed: ${result.successful} successful, ${result.failed} failed`
+      );
+
+      if (result.failed > 0) {
+        return ResponseHelper.ok({
+          ...result,
+          message: `Updated ${result.successful} employees, ${result.failed} failed`,
+        });
+      }
+
+      return ResponseHelper.ok({
+        ...result,
+        message: `Successfully updated ${result.successful} employees`,
+      });
+    } catch (error) {
+      context.error('Error bulk updating employees:', error);
+      if (error instanceof Error) {
+        return ResponseHelper.badRequest(error.message);
+      }
+      return ResponseHelper.internalServerError();
+    }
+  }
+
+  @RequireRoles([UserRole.ADMIN, UserRole.SUPER_ADMIN])
+  async bulkUpdateByFilter(
+    request: HttpRequest,
+    context: InvocationContext
+  ): Promise<HttpResponseInit> {
+    try {
+      if (request.method !== 'PUT') {
+        return ResponseHelper.methodNotAllowed();
+      }
+
+      const authResult = await AuthHelper.requireAuth(request, context);
+      if (!authResult.success) {
+        return authResult.response;
+      }
+
+      const body = (await request.json()) as BulkUpdateByFilterDto;
+
+      if (!body.filters || !body.updates) {
+        return ResponseHelper.badRequest('Request must include filters and updates');
+      }
+
+      // Check if updates object has at least one field
+      if (Object.keys(body.updates).length === 0) {
+        return ResponseHelper.badRequest('Updates object must contain at least one field');
+      }
+
+      context.log('Bulk updating employees by filter:', body.filters);
+
+      const result = await this.employeeService.bulkUpdateByFilter(body);
+
+      context.log(
+        `Bulk update by filter completed: ${result.successful} successful, ${result.failed} failed`
+      );
+
+      if (result.successful === 0) {
+        return ResponseHelper.ok({
+          ...result,
+          message: 'No employees matched the filters',
+        });
+      }
+
+      if (result.failed > 0) {
+        return ResponseHelper.ok({
+          ...result,
+          message: `Updated ${result.successful} employees, ${result.failed} failed`,
+        });
+      }
+
+      return ResponseHelper.ok({
+        ...result,
+        message: `Successfully updated ${result.successful} employees`,
+      });
+    } catch (error) {
+      context.error('Error bulk updating employees by filter:', error);
+      if (error instanceof Error) {
+        return ResponseHelper.badRequest(error.message);
+      }
+      return ResponseHelper.internalServerError();
+    }
+  }
 }
 
 // Azure Functions endpoints
@@ -475,6 +611,15 @@ const getVotingGroupsFunction = async (
   return controller.getVotingGroups(request, context);
 };
 
+const getLocationsFunction = async (
+  request: HttpRequest,
+  context: InvocationContext
+): Promise<HttpResponseInit> => {
+  const dependencies = await getDependencies();
+  const controller = new EmployeeController(dependencies.employeeService);
+  return controller.getLocations(request, context);
+};
+
 const exportEmployeesToCSVFunction = async (
   request: HttpRequest,
   context: InvocationContext
@@ -491,6 +636,24 @@ const getEligibleEmployeesFunction = async (
   const dependencies = await getDependencies();
   const controller = new EmployeeController(dependencies.employeeService);
   return controller.getEligibleEmployees(request, context);
+};
+
+const bulkUpdateEmployeesFunction = async (
+  request: HttpRequest,
+  context: InvocationContext
+): Promise<HttpResponseInit> => {
+  const dependencies = await getDependencies();
+  const controller = new EmployeeController(dependencies.employeeService);
+  return controller.bulkUpdateEmployees(request, context);
+};
+
+const bulkUpdateByFilterFunction = async (
+  request: HttpRequest,
+  context: InvocationContext
+): Promise<HttpResponseInit> => {
+  const dependencies = await getDependencies();
+  const controller = new EmployeeController(dependencies.employeeService);
+  return controller.bulkUpdateByFilter(request, context);
 };
 
 app.http('get-employees', {
@@ -540,4 +703,25 @@ app.http('get-voting-groups', {
   authLevel: 'anonymous',
   route: 'voting-groups',
   handler: getVotingGroupsFunction,
+});
+
+app.http('get-locations', {
+  methods: ['GET', 'OPTIONS'],
+  authLevel: 'anonymous',
+  route: 'locations',
+  handler: getLocationsFunction,
+});
+
+app.http('bulk-update-employees', {
+  methods: ['PUT', 'OPTIONS'],
+  authLevel: 'anonymous',
+  route: 'employees/bulk-update',
+  handler: bulkUpdateEmployeesFunction,
+});
+
+app.http('bulk-update-by-filter', {
+  methods: ['PUT', 'OPTIONS'],
+  authLevel: 'anonymous',
+  route: 'employees/bulk-update-filter',
+  handler: bulkUpdateByFilterFunction,
 });
