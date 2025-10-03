@@ -17,14 +17,24 @@ export class EmployeeService {
     private readonly votingGroupService?: VotingGroupService
   ) {}
 
-  async getEmployees(filters?: {
-    isActive?: boolean;
-    department?: string;
-    position?: string;
-    location?: string;
-    votingGroup?: string;
-  }): Promise<Employee[]> {
-    return this.employeeRepository.findAll(filters);
+  async getEmployees(
+    filters?: {
+      isActive?: boolean;
+      department?: string;
+      position?: string;
+      location?: string;
+      votingGroup?: string;
+    },
+    pagination?: {
+      pageSize?: number;
+      continuationToken?: string;
+    }
+  ): Promise<{
+    employees: Employee[];
+    continuationToken?: string;
+    hasMore: boolean;
+  }> {
+    return this.employeeRepository.findAll(filters, pagination);
   }
 
   async getEmployeeById(id: string): Promise<Employee | null> {
@@ -124,7 +134,7 @@ export class EmployeeService {
     }
 
     // Get all active employees with optional filters
-    const allEmployees = await this.employeeRepository.findAll({
+    const { employees: allEmployees } = await this.employeeRepository.findAll({
       ...filters,
       isActive: true,
     });
@@ -212,7 +222,7 @@ export class EmployeeService {
     };
 
     // Get employees matching the filters
-    const employees = await this.employeeRepository.findAll(filterDto.filters);
+    const { employees } = await this.employeeRepository.findAll(filterDto.filters);
 
     if (employees.length === 0) {
       return response;

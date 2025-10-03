@@ -123,14 +123,24 @@ export class EmployeeRepository {
     await container.item(id, id).delete();
   }
 
-  async findAll(filters?: {
-    isActive?: boolean;
-    department?: string;
-    position?: string;
-    location?: string;
-    votingGroup?: string;
-    votingEligible?: boolean;
-  }): Promise<Employee[]> {
+  async findAll(
+    filters?: {
+      isActive?: boolean;
+      department?: string;
+      position?: string;
+      location?: string;
+      votingGroup?: string;
+      votingEligible?: boolean;
+    },
+    pagination?: {
+      pageSize?: number;
+      continuationToken?: string;
+    }
+  ): Promise<{
+    employees: Employee[];
+    continuationToken?: string;
+    hasMore: boolean;
+  }> {
     const container = await this.cosmosClient.getContainer(this.containerName);
 
     let query = 'SELECT * FROM c';
@@ -181,8 +191,29 @@ export class EmployeeRepository {
       parameters,
     };
 
-    const { resources } = await container.items.query<Employee>(querySpec).fetchAll();
-    return resources as Employee[];
+    // If no pagination is requested, fetch all results (backward compatibility)
+    if (!pagination) {
+      const { resources } = await container.items.query<Employee>(querySpec).fetchAll();
+      return {
+        employees: resources as Employee[],
+        hasMore: false,
+      };
+    }
+
+    // Use native Cosmos DB pagination
+    const pageSize = pagination.pageSize || 50;
+    const queryIterator = container.items.query<Employee>(querySpec, {
+      maxItemCount: pageSize,
+      continuationToken: pagination.continuationToken,
+    });
+
+    const { resources, continuationToken, hasMoreResults } = await queryIterator.fetchNext();
+
+    return {
+      employees: resources as Employee[],
+      continuationToken: continuationToken,
+      hasMore: hasMoreResults,
+    };
   }
 
   async count(): Promise<number> {
