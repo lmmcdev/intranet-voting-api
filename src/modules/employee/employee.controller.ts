@@ -227,8 +227,8 @@ export class EmployeeController {
 
       const body = (await request.json()) as Partial<Employee>;
 
-      // Prevent updating certain fields
-      const restrictedFields = ['id', 'createdAt'];
+      // Prevent updating certain fields (password should only be updated via auth endpoints)
+      const restrictedFields = ['id', 'createdAt', 'password'];
       for (const field of restrictedFields) {
         if (field in body) {
           delete (body as any)[field];

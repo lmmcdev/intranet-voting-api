@@ -9,6 +9,7 @@ import { VotingGroupService } from './VotingGroupService';
 import { VotingGroupConfig } from '../modules/configuration/models/voting-group-config.model';
 import { PasswordHelper } from './utils/PasswordHelper';
 import { DEFAULT_INITIAL_PASSWORD } from '../config/env.config';
+import { NameHelper } from './utils/NameHelper';
 
 export interface SyncResult {
   newUsers: number;
@@ -85,6 +86,9 @@ export class EmployeeSyncService {
         result.totalProcessed++;
 
         try {
+          // Normalize name fields (firstName, middleName, lastName, fullName)
+          NameHelper.normalizeNameFields(employee);
+
           // Assign voting group
           if (this.votingGroupService) {
             employee.votingGroup = this.votingGroupService.assignVotingGroup(employee);

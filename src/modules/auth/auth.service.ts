@@ -1,5 +1,5 @@
 import jwt, { SignOptions } from 'jsonwebtoken';
-import { JWT_SECRET, JWT_EXPIRES_IN } from '../../config/env.config';
+import { JWT_SECRET, JWT_EXPIRES_IN, DEFAULT_INITIAL_PASSWORD } from '../../config/env.config';
 import { Employee } from '../employee/models/employee.model';
 import { EmployeeRepository } from '../employee/repositories/EmployeeRepository';
 import { PasswordHelper } from '../../common/utils/PasswordHelper';
@@ -144,6 +144,105 @@ export class AuthService {
         message: `Password change failed: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
+  }
+
+  async resetPasswordToDefault(userId: string): Promise<ChangePasswordResponse> {
+    try {
+      // Find employee by ID
+      const employee = await this.employeeRepository.findById(userId);
+
+      if (!employee) {
+        return {
+          success: false,
+          message: 'Employee not found',
+        };
+      }
+
+      // Hash default password
+      const hashedPassword = await PasswordHelper.hash(DEFAULT_INITIAL_PASSWORD);
+
+      // Update password and set firstLogin flag
+      const updatedEmployee: Employee = {
+        ...employee,
+        password: hashedPassword,
+        firstLogin: true,
+        updatedAt: new Date(),
+      };
+
+      await this.employeeRepository.update(userId, updatedEmployee);
+
+      return {
+        success: true,
+        message: `Password reset to default successfully. New password: ${DEFAULT_INITIAL_PASSWORD}`,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: `Password reset failed: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  }
+
+  async bulkResetPasswordsToDefault(filters?: {
+    isActive?: boolean;
+    department?: string;
+    position?: string;
+    location?: string;
+    votingGroup?: string;
+  }): Promise<{
+    success: boolean;
+    totalReset: number;
+    errors: { id: string; error: string }[];
+    defaultPassword: string;
+  }> {
+    const result = {
+      success: true,
+      totalReset: 0,
+      errors: [] as { id: string; error: string }[],
+      defaultPassword: DEFAULT_INITIAL_PASSWORD,
+    };
+
+    try {
+      // Get employees matching the filters (or all if no filters)
+      const employees = await this.employeeRepository.findAll(filters || {});
+
+      if (employees.length === 0) {
+        return result;
+      }
+
+      // Hash default password once for all employees
+      const hashedPassword = await PasswordHelper.hash(DEFAULT_INITIAL_PASSWORD);
+
+      // Reset password for each employee
+      for (const employee of employees) {
+        try {
+          const updatedEmployee: Employee = {
+            ...employee,
+            password: hashedPassword,
+            firstLogin: true,
+            updatedAt: new Date(),
+          };
+
+          await this.employeeRepository.update(employee.id, updatedEmployee);
+          result.totalReset++;
+        } catch (error) {
+          result.errors.push({
+            id: employee.id,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+        }
+      }
+
+      console.log(`[AuthService] Bulk password reset: ${result.totalReset} employees updated`);
+    } catch (error) {
+      result.success = false;
+      result.errors.push({
+        id: 'BULK_RESET',
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+
+    return result;
   }
 
   private async verifyPassword(plainPassword: string, hashedPassword?: string): Promise<boolean> {

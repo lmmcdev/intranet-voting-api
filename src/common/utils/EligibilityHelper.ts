@@ -14,9 +14,14 @@ export class EligibilityHelper {
       return false;
     }
 
-    // Check excluded job titles
-    if (employee.jobTitle && config.excludedJobTitles.includes(employee.jobTitle)) {
-      return false;
+    // Check excluded job titles (partial match - case insensitive)
+    if (employee.jobTitle && config.excludedJobTitles.length > 0) {
+      const normalizedJobTitle = employee.jobTitle.toLowerCase();
+      for (const excludedTitle of config.excludedJobTitles) {
+        if (normalizedJobTitle.includes(excludedTitle.toLowerCase())) {
+          return false;
+        }
+      }
     }
 
     // Check excluded departments
