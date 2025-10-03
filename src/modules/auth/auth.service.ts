@@ -204,7 +204,7 @@ export class AuthService {
 
     try {
       // Get employees matching the filters (or all if no filters)
-      const employees = await this.employeeRepository.findAll(filters || {});
+      const { employees } = await this.employeeRepository.findAll(filters || {});
 
       if (employees.length === 0) {
         return result;

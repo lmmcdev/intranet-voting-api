@@ -70,8 +70,20 @@ export class EmployeeController {
         filters.location = location;
       }
 
-      const employees = await this.employeeService.getEmployees(filters);
-      return ResponseHelper.ok(employees);
+      // Pagination parameters
+      const pageSize = request.query.get('pageSize');
+      const continuationToken = request.query.get('continuationToken');
+
+      const pagination =
+        pageSize || continuationToken
+          ? {
+              pageSize: pageSize ? parseInt(pageSize, 10) : undefined,
+              continuationToken: continuationToken || undefined,
+            }
+          : undefined;
+
+      const result = await this.employeeService.getEmployees(filters, pagination);
+      return ResponseHelper.ok(result);
     } catch (error) {
       context.error('Error getting employees:', error);
       return ResponseHelper.internalServerError();
@@ -370,7 +382,7 @@ export class EmployeeController {
       const votingGroup = request.query.get('votingGroup');
       if (votingGroup) filters.votingGroup = votingGroup;
 
-      const employees = await this.employeeService.getEmployees(filters);
+      const { employees } = await this.employeeService.getEmployees(filters);
 
       // Build CSV content
       const headers = [

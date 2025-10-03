@@ -63,7 +63,7 @@ export class EmployeeSyncService {
 
       // Step 4: Sync to database
       // Get ALL existing employees (including inactive) to properly detect duplicates
-      const existingEmployees = await this.employeeRepository.findAll({ isActive: undefined });
+      const { employees: existingEmployees } = await this.employeeRepository.findAll({ isActive: undefined });
       const existingEmployeeMap = new Map<string, Employee>();
       existingEmployees.forEach(emp => existingEmployeeMap.set(emp.id, emp));
 
@@ -96,26 +96,26 @@ export class EmployeeSyncService {
 
           const existingEmployee = existingEmployeeMap.get(employee.id);
 
-          // Generate username and password if not exists
-          if (!employee.username && employee.firstName && employee.lastName) {
-            employee.username = await this.generateUniqueUsername(
-              employee.firstName,
-              employee.lastName,
-              existingUsernames
-            );
-            existingUsernames.add(employee.username);
-          }
-
-          // Set default password for new employees only
-          if (!existingEmployee && !employee.password) {
-            employee.password = await PasswordHelper.hash(DEFAULT_INITIAL_PASSWORD);
-            employee.firstLogin = true; // Flag for password change on first login
-            console.log(
-              `[EmployeeSyncService] Set default password for ${employee.username}`
-            );
-          }
-
+          // Generate username only for new employees
           if (!existingEmployee) {
+            if (!employee.username && employee.firstName && employee.lastName) {
+              employee.username = await this.generateUniqueUsername(
+                employee.firstName,
+                employee.lastName,
+                existingUsernames
+              );
+              existingUsernames.add(employee.username);
+            }
+
+            // Set default password for new employees only
+            if (!employee.password) {
+              employee.password = await PasswordHelper.hash(DEFAULT_INITIAL_PASSWORD);
+              employee.firstLogin = true; // Flag for password change on first login
+              console.log(
+                `[EmployeeSyncService] Set default password for ${employee.username}`
+              );
+            }
+
             await this.employeeRepository.upsert(employee);
             result.newUsers++;
           } else if (this.hasEmployeeChanged(existingEmployee, employee)) {
@@ -124,6 +124,7 @@ export class EmployeeSyncService {
               createdAt: existingEmployee.createdAt,
               updatedAt: new Date(),
               password: existingEmployee.password, // Preserve existing password
+              username: existingEmployee.username, // Preserve existing username
             };
             await this.employeeRepository.upsert(updatedEmployee);
             result.updatedUsers++;
@@ -151,11 +152,42 @@ export class EmployeeSyncService {
     // Normalize names: lowercase and remove special characters
     const normalizedFirstName = firstName.toLowerCase().replace(/[^a-z0-9]/g, '');
 
-    // For compound last names (e.g., "Tapia Salvador"), use only the first part
-    const lastNameFirstPart = lastName.split(/\s+/)[0];
-    const normalizedLastName = lastNameFirstPart.toLowerCase().replace(/[^a-z0-9]/g, '');
+    // For compound last names, intelligently select the most significant part
+    const lastNameParts = lastName.split(/\s+/);
 
-    // Base username: firstname.lastname (first part of compound last name)
+    // Common Spanish prepositions/articles
+    const skipWords = ['de', 'del', 'la', 'los', 'las', 'y'];
+
+    let selectedLastName = '';
+    if (lastNameParts.length === 1) {
+      // Single last name: use as-is
+      selectedLastName = lastNameParts[0];
+    } else {
+      // Check if the first part is a preposition/article
+      const firstPart = lastNameParts[0].toLowerCase();
+
+      if (skipWords.includes(firstPart)) {
+        // If starts with preposition (e.g., "De La Cruz"), use the last significant word
+        for (let i = lastNameParts.length - 1; i >= 0; i--) {
+          const part = lastNameParts[i].toLowerCase();
+          if (!skipWords.includes(part)) {
+            selectedLastName = lastNameParts[i];
+            break;
+          }
+        }
+        // Fallback: if all are skip words, use the last one
+        if (!selectedLastName) {
+          selectedLastName = lastNameParts[lastNameParts.length - 1];
+        }
+      } else {
+        // Regular compound last name (e.g., "Tapia Salvador"), use the first part
+        selectedLastName = lastNameParts[0];
+      }
+    }
+
+    const normalizedLastName = selectedLastName.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    // Base username: firstname.lastname
     let username = `${normalizedFirstName}.${normalizedLastName}`;
 
     // If username already exists, append a number
@@ -303,7 +335,7 @@ export class EmployeeSyncService {
       this.votingGroupService.updateConfiguration(config);
 
       // Get all employees (active and inactive) to update voting groups
-      const employees = await this.employeeRepository.findAll({});
+      const { employees } = await this.employeeRepository.findAll({});
       console.log(`[EmployeeSyncService] Updating voting groups for ${employees.length} employees`);
 
       // Update each employee's voting group
@@ -355,7 +387,7 @@ export class EmployeeSyncService {
 
     try {
       // Get all employees
-      const employees = await this.employeeRepository.findAll({});
+      const { employees } = await this.employeeRepository.findAll({});
       console.log(`[EmployeeSyncService] Updating eligibility for ${employees.length} employees`);
 
       const { EligibilityHelper } = await import('./utils/EligibilityHelper.js');

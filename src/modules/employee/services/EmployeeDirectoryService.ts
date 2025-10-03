@@ -550,6 +550,15 @@ export class EmployeeDirectoryService {
     return trimmed && trimmed.length > 0 ? trimmed : undefined;
   }
 
+  private capitalizeName(name: string): string {
+    // Normalize to lowercase first, then capitalize first letter of each word
+    return name
+      .toLowerCase()
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  }
+
   private parseExcel(buffer: Buffer): ExternalEmployeeRecord[] {
     try {
       const workbook = XLSX.read(buffer, { type: 'buffer' });
@@ -569,13 +578,18 @@ export class EmployeeDirectoryService {
         const row = jsonData[i];
 
         // Extract fields based on the ADP Excel structure
-        const lastName = this.cleanValue(row['LEGAL LAST NAME']);
-        const firstName = this.cleanValue(row['LEGAL FIRST NAME']);
-        const middleName = this.cleanValue(row['LEGAL MIDDLE NAME']);
+        const lastNameRaw = this.cleanValue(row['LEGAL LAST NAME']);
+        const firstNameRaw = this.cleanValue(row['LEGAL FIRST NAME']);
+        const middleNameRaw = this.cleanValue(row['LEGAL MIDDLE NAME']);
 
-        if (!lastName || !firstName) {
+        if (!lastNameRaw || !firstNameRaw) {
           continue; // Skip rows without valid name
         }
+
+        // Normalize names: First letter uppercase, rest lowercase
+        const lastName = this.capitalizeName(lastNameRaw);
+        const firstName = this.capitalizeName(firstNameRaw);
+        const middleName = middleNameRaw ? this.capitalizeName(middleNameRaw) : undefined;
 
         // Build full name
         const fullName = middleName
@@ -627,8 +641,9 @@ export class EmployeeDirectoryService {
   private parseJobTitle(jobTitle?: string): { position?: string; code?: string } {
     if (!jobTitle) return {};
 
-    // Format: "CODE - Position"
-    const match = jobTitle.match(/^([A-Z]+)\s*-\s*(.+)$/);
+    // Format: "CODE - Position" (e.g., "TECH I - IT TECH I")
+    // Extract everything after the first " - " separator
+    const match = jobTitle.match(/^([A-Z\s]+?)\s*-\s*(.+)$/);
     if (match) {
       return {
         code: match[1].trim(),
@@ -643,7 +658,8 @@ export class EmployeeDirectoryService {
     if (!department) return {};
 
     // Format: "CODE - Department Name"
-    const match = department.match(/^([A-Z]+)\s*-\s*(.+)$/);
+    // Extract everything after the first " - " separator
+    const match = department.match(/^([A-Z\s]+?)\s*-\s*(.+)$/);
     if (match) {
       return {
         departmentCode: match[1].trim(),
@@ -657,8 +673,9 @@ export class EmployeeDirectoryService {
   private parseLocation(location?: string): { location?: string; locationCode?: string } {
     if (!location) return {};
 
-    // Format: "CODE - Location Name" (e.g., "LMMAN - Las Mercedes Management")
-    const match = location.match(/^([A-Z]+)\s*-\s*(.+)$/);
+    // Format: "CODE - Location Name" (e.g., "LM BR - Las Mercedes Bird Road")
+    // Extract everything after the first " - " separator
+    const match = location.match(/^([A-Z\s]+?)\s*-\s*(.+)$/);
     if (match) {
       return {
         locationCode: match[1].trim(),
