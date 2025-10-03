@@ -2,7 +2,7 @@ import { Nomination, NominationWithEmployee } from '../../../common/models/Nomin
 import { CreateNominationDto, Criteria } from '../dto/create-nomination.dto';
 import { UpdateNominationDto } from '../dto/update-nomination.dto';
 import { VotingPeriod, VotingPeriodStatus } from '../../../common/models/VotingPeriod';
-import { VoteResult, VotingPeriodResults } from '../../../common/models/VoteResult';
+import { VoteResult, VotingPeriodResults, WinnersContainer } from '../../../common/models/VoteResult';
 import { NominationRepository } from '../repositories/NominationRepository';
 import { VotingPeriodRepository } from '../repositories/VotingPeriodRepository';
 import { AzureEmployeeService } from '../../../common/AzureEmployeeService';
@@ -121,10 +121,55 @@ export class VotingService {
     }
 
     const nominations = await this.nominationRepository.findByVotingPeriod(votingPeriodId);
-    const employeeVotes = this.aggregateVotes(nominations);
-    const totalNominations = nominations.length;
-    const totalVotes = employeeVotes.reduce((sum, vote) => sum + vote.count, 0);
 
+    // Group nominations by votingGroup
+    const nominationsByGroup = new Map<string, typeof nominations>();
+    for (const nomination of nominations) {
+      const employee = await this.employeeService.getEmployeeById(nomination.nominatedEmployeeId);
+      const votingGroup = employee?.votingGroup || 'default';
+
+      if (!nominationsByGroup.has(votingGroup)) {
+        nominationsByGroup.set(votingGroup, []);
+      }
+      nominationsByGroup.get(votingGroup)!.push(nomination);
+    }
+
+    const allResults: VoteResult[] = [];
+    const winnersByGroup: VoteResult[] = [];
+
+    // Process each voting group separately
+    for (const [votingGroup, groupNominations] of nominationsByGroup.entries()) {
+      const employeeVotes = this.aggregateVotes(groupNominations);
+      const groupTotalNominations = groupNominations.length;
+
+      const groupResults: VoteResult[] = await Promise.all(
+        employeeVotes.map(async (vote, index) => {
+          const employee = await this.employeeService.getEmployeeById(vote.employeeId);
+          return {
+            votingPeriodId,
+            employeeId: vote.employeeId,
+            employeeName: employee?.fullName || 'Unknown',
+            department: employee?.department || 'Unknown',
+            position: employee?.position || 'Unknown',
+            nominationCount: vote.count,
+            percentage: (vote.count / groupTotalNominations) * 100,
+            rank: index + 1,
+            averageCriteria: vote.averageCriteria,
+            votingGroup: votingGroup === 'default' ? undefined : votingGroup,
+          };
+        })
+      );
+
+      allResults.push(...groupResults);
+
+      // The first result in each group is the winner for that group
+      if (groupResults[0]) {
+        winnersByGroup.push(groupResults[0]);
+      }
+    }
+
+    const totalNominations = nominations.length;
+    const totalVotes = allResults.reduce((sum, result) => sum + result.nominationCount, 0);
     const totalEmployees = await this.employeeService.getEmployeeCount();
 
     console.log(
@@ -132,25 +177,17 @@ export class VotingService {
     );
 
     const averageRate = totalEmployees > 0 ? totalNominations / totalEmployees : 0;
-
     const averageVotes = +(averageRate * 100).toFixed(2);
 
-    const results: VoteResult[] = await Promise.all(
-      employeeVotes.map(async (vote, index) => {
-        const employee = await this.employeeService.getEmployeeById(vote.employeeId);
-        return {
-          votingPeriodId,
-          employeeId: vote.employeeId,
-          employeeName: employee?.fullName || 'Unknown',
-          department: employee?.department || 'Unknown',
-          position: employee?.position || 'Unknown',
-          nominationCount: vote.count,
-          percentage: (vote.count / totalNominations) * 100,
-          rank: index + 1,
-          averageCriteria: vote.averageCriteria,
-        };
-      })
-    );
+    // Sort results by votingGroup and rank
+    allResults.sort((a, b) => {
+      const groupA = a.votingGroup || 'default';
+      const groupB = b.votingGroup || 'default';
+      if (groupA !== groupB) {
+        return groupA.localeCompare(groupB);
+      }
+      return a.rank - b.rank;
+    });
 
     return {
       votingPeriod: {
@@ -161,8 +198,9 @@ export class VotingService {
       },
       totalNominations,
       averageVotes,
-      results,
-      winner: results[0],
+      results: allResults,
+      winner: winnersByGroup[0], // For backwards compatibility, return first winner
+      winners: winnersByGroup,
     };
   }
 
@@ -277,13 +315,44 @@ export class VotingService {
     for (const period of recentPeriods) {
       if (period.status === VotingPeriodStatus.CLOSED) {
         const results = await this.getVotingResults(period.id);
-        if (results.winner) {
+        // Include all winners from all voting groups
+        if (results.winners && results.winners.length > 0) {
+          winners.push(...results.winners);
+        } else if (results.winner) {
+          // Fallback for backwards compatibility
           winners.push(results.winner);
         }
       }
     }
 
     return winners;
+  }
+
+  async getWinnersGrouped(): Promise<WinnersContainer[]> {
+    const recentPeriods = await this.votingPeriodRepository.findRecentPeriods();
+    const winnersContainers: WinnersContainer[] = [];
+
+    for (const period of recentPeriods) {
+      if (period.status === VotingPeriodStatus.CLOSED) {
+        const results = await this.getVotingResults(period.id);
+
+        if (results.winners && results.winners.length > 0) {
+          const winnersByGroup = results.winners.map(winner => ({
+            votingGroup: winner.votingGroup || 'default',
+            winner,
+          }));
+
+          winnersContainers.push({
+            votingPeriodId: period.id,
+            year: period.year,
+            month: period.month,
+            winnersByGroup,
+          });
+        }
+      }
+    }
+
+    return winnersContainers;
   }
 
   async getNomination(id: string): Promise<Nomination | null> {

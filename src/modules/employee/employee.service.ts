@@ -3,6 +3,11 @@ import { EmployeeRepository } from './repositories/EmployeeRepository';
 import { EligibilityHelper } from '../../common/utils/EligibilityHelper';
 import { ConfigurationService } from '../configuration/configuration.service';
 import { VotingGroupService } from '../../common/VotingGroupService';
+import {
+  BulkUpdateEmployeeDto,
+  BulkUpdateEmployeesResponseDto,
+  BulkUpdateByFilterDto,
+} from './dto/bulk-update-employee.dto';
 
 export class EmployeeService {
   constructor(
@@ -93,6 +98,10 @@ export class EmployeeService {
     return this.employeeRepository.getDistinctVotingGroups();
   }
 
+  async getLocations(): Promise<string[]> {
+    return this.employeeRepository.getDistinctLocations();
+  }
+
   async updateEmployee(id: string, updates: Partial<Employee>): Promise<Employee | null> {
     return this.employeeRepository.partialUpdate(id, updates);
   }
@@ -124,5 +133,121 @@ export class EmployeeService {
     return allEmployees.filter(employee =>
       EligibilityHelper.isVotingEligible(employee, eligibilityConfig)
     );
+  }
+
+  async bulkUpdateEmployees(
+    employees: BulkUpdateEmployeeDto[]
+  ): Promise<BulkUpdateEmployeesResponseDto> {
+    const response: BulkUpdateEmployeesResponseDto = {
+      successful: 0,
+      failed: 0,
+      errors: [],
+      updatedEmployees: [],
+    };
+
+    for (const item of employees) {
+      try {
+        // Validate that the employee exists
+        const existingEmployee = await this.employeeRepository.findById(item.id);
+        if (!existingEmployee) {
+          response.failed++;
+          response.errors.push({
+            id: item.id,
+            error: 'Employee not found',
+          });
+          continue;
+        }
+
+        // Prevent updating certain fields
+        const restrictedFields = ['id', 'createdAt'];
+        const updates = { ...item.updates };
+        for (const field of restrictedFields) {
+          if (field in updates) {
+            delete (updates as any)[field];
+          }
+        }
+
+        // Add updatedAt timestamp
+        (updates as any).updatedAt = new Date();
+
+        // Update the employee
+        const updatedEmployee = await this.employeeRepository.partialUpdate(item.id, updates);
+
+        if (updatedEmployee) {
+          response.successful++;
+          response.updatedEmployees.push(updatedEmployee);
+        } else {
+          response.failed++;
+          response.errors.push({
+            id: item.id,
+            error: 'Failed to update employee',
+          });
+        }
+      } catch (error) {
+        response.failed++;
+        response.errors.push({
+          id: item.id,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+    }
+
+    return response;
+  }
+
+  async bulkUpdateByFilter(
+    filterDto: BulkUpdateByFilterDto
+  ): Promise<BulkUpdateEmployeesResponseDto> {
+    const response: BulkUpdateEmployeesResponseDto = {
+      successful: 0,
+      failed: 0,
+      errors: [],
+      updatedEmployees: [],
+    };
+
+    // Get employees matching the filters
+    const employees = await this.employeeRepository.findAll(filterDto.filters);
+
+    if (employees.length === 0) {
+      return response;
+    }
+
+    // Prevent updating certain fields
+    const restrictedFields = ['id', 'createdAt'];
+    const updates = { ...filterDto.updates };
+    for (const field of restrictedFields) {
+      if (field in updates) {
+        delete (updates as any)[field];
+      }
+    }
+
+    // Add updatedAt timestamp
+    (updates as any).updatedAt = new Date();
+
+    // Update each employee
+    for (const employee of employees) {
+      try {
+        const updatedEmployee = await this.employeeRepository.partialUpdate(employee.id, updates);
+
+        if (updatedEmployee) {
+          response.successful++;
+          response.updatedEmployees.push(updatedEmployee);
+        } else {
+          response.failed++;
+          response.errors.push({
+            id: employee.id,
+            error: 'Failed to update employee',
+          });
+        }
+      } catch (error) {
+        response.failed++;
+        response.errors.push({
+          id: employee.id,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+    }
+
+    return response;
   }
 }
