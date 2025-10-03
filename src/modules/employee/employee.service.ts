@@ -8,6 +8,7 @@ import {
   BulkUpdateEmployeesResponseDto,
   BulkUpdateByFilterDto,
 } from './dto/bulk-update-employee.dto';
+import { NameHelper } from '../../common/utils/NameHelper';
 
 export class EmployeeService {
   constructor(
@@ -103,7 +104,9 @@ export class EmployeeService {
   }
 
   async updateEmployee(id: string, updates: Partial<Employee>): Promise<Employee | null> {
-    return this.employeeRepository.partialUpdate(id, updates);
+    // Normalize name fields if they're being updated
+    const normalizedUpdates = NameHelper.normalizeNameFields(updates);
+    return this.employeeRepository.partialUpdate(id, normalizedUpdates);
   }
 
   async getEmployeeByEmail(email: string): Promise<Employee | null> {
@@ -158,8 +161,8 @@ export class EmployeeService {
           continue;
         }
 
-        // Prevent updating certain fields
-        const restrictedFields = ['id', 'createdAt'];
+        // Prevent updating certain fields (password should only be updated via auth endpoints)
+        const restrictedFields = ['id', 'createdAt', 'password'];
         const updates = { ...item.updates };
         for (const field of restrictedFields) {
           if (field in updates) {
@@ -167,11 +170,14 @@ export class EmployeeService {
           }
         }
 
+        // Normalize name fields if they're being updated
+        const normalizedUpdates = NameHelper.normalizeNameFields(updates);
+
         // Add updatedAt timestamp
-        (updates as any).updatedAt = new Date();
+        (normalizedUpdates as any).updatedAt = new Date();
 
         // Update the employee
-        const updatedEmployee = await this.employeeRepository.partialUpdate(item.id, updates);
+        const updatedEmployee = await this.employeeRepository.partialUpdate(item.id, normalizedUpdates);
 
         if (updatedEmployee) {
           response.successful++;
@@ -212,8 +218,8 @@ export class EmployeeService {
       return response;
     }
 
-    // Prevent updating certain fields
-    const restrictedFields = ['id', 'createdAt'];
+    // Prevent updating certain fields (password should only be updated via auth endpoints)
+    const restrictedFields = ['id', 'createdAt', 'password'];
     const updates = { ...filterDto.updates };
     for (const field of restrictedFields) {
       if (field in updates) {
@@ -221,13 +227,16 @@ export class EmployeeService {
       }
     }
 
+    // Normalize name fields if they're being updated
+    const normalizedUpdates = NameHelper.normalizeNameFields(updates);
+
     // Add updatedAt timestamp
-    (updates as any).updatedAt = new Date();
+    (normalizedUpdates as any).updatedAt = new Date();
 
     // Update each employee
     for (const employee of employees) {
       try {
-        const updatedEmployee = await this.employeeRepository.partialUpdate(employee.id, updates);
+        const updatedEmployee = await this.employeeRepository.partialUpdate(employee.id, normalizedUpdates);
 
         if (updatedEmployee) {
           response.successful++;

@@ -97,6 +97,13 @@ export class EmployeeRepository {
         return null;
       }
 
+      // if updates want update password make sure to hash it
+      if (updates.password && updates.password !== existingEmployee.password) {
+        throw new Error(
+          'Password updates must be done through the designated password update method.'
+        );
+      }
+
       const updatedEmployee: Employee = {
         ...existingEmployee,
         ...updates,
