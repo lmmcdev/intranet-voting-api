@@ -60,10 +60,29 @@ export class ConfigurationController {
 
       context.log('Eligibility configuration updated:', updatedConfig);
 
-      return ResponseHelper.ok({
-        message: 'Eligibility configuration updated successfully',
-        config: updatedConfig,
-      });
+      // Automatically update all employees' eligibility based on new configuration
+      try {
+        const { employeeSyncService } = await getDependencies();
+        context.log('Updating employee eligibility based on new configuration...');
+
+        const updateResult = await employeeSyncService.updateEligibility(updatedConfig);
+
+        context.log(`Eligibility updated for ${updateResult.totalUpdated} employees`);
+
+        return ResponseHelper.ok({
+          message: 'Eligibility configuration updated successfully',
+          config: updatedConfig,
+          employeesUpdated: updateResult.totalUpdated,
+          updateErrors: updateResult.errors,
+        });
+      } catch (syncError) {
+        context.warn('Eligibility configuration saved but employee update failed:', syncError);
+        return ResponseHelper.ok({
+          message: 'Eligibility configuration updated, but employee update failed',
+          config: updatedConfig,
+          warning: 'Employees may need manual eligibility update',
+        });
+      }
     } catch (error) {
       context.error('Error updating eligibility configuration:', error);
       return ResponseHelper.internalServerError('Failed to update eligibility configuration');
@@ -151,10 +170,29 @@ export class ConfigurationController {
 
       context.log('Voting group configuration updated:', updatedConfig);
 
-      return ResponseHelper.ok({
-        message: 'Voting group configuration updated successfully',
-        config: updatedConfig,
-      });
+      // Automatically update all employees' voting groups based on new configuration
+      try {
+        const { employeeSyncService } = await getDependencies();
+        context.log('Updating employee voting groups based on new configuration...');
+
+        const updateResult = await employeeSyncService.updateVotingGroups(updatedConfig);
+
+        context.log(`Voting groups updated for ${updateResult.totalUpdated} employees`);
+
+        return ResponseHelper.ok({
+          message: 'Voting group configuration updated successfully',
+          config: updatedConfig,
+          employeesUpdated: updateResult.totalUpdated,
+          updateErrors: updateResult.errors,
+        });
+      } catch (syncError) {
+        context.warn('Voting group configuration saved but employee update failed:', syncError);
+        return ResponseHelper.ok({
+          message: 'Voting group configuration updated, but employee update failed',
+          config: updatedConfig,
+          warning: 'Employees may need manual voting group update',
+        });
+      }
     } catch (error) {
       context.error('Error updating voting group configuration:', error);
       return ResponseHelper.internalServerError('Failed to update voting group configuration');

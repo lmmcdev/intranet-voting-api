@@ -298,8 +298,8 @@ export class EmployeeSyncService {
 
       this.votingGroupService.updateConfiguration(config);
 
-      // Get all active employees
-      const employees = await this.employeeRepository.findSyncableEmployees();
+      // Get all employees (active and inactive) to update voting groups
+      const employees = await this.employeeRepository.findAll({});
       console.log(`[EmployeeSyncService] Updating voting groups for ${employees.length} employees`);
 
       // Update each employee's voting group
@@ -330,6 +330,60 @@ export class EmployeeSyncService {
     } catch (error) {
       result.success = false;
       const errorMessage = `Error during voting group update: ${error instanceof Error ? error.message : String(error)}`;
+      result.errors.push(errorMessage);
+    }
+
+    return result;
+  }
+
+  async updateEligibility(
+    config: any
+  ): Promise<{
+    success: boolean;
+    totalUpdated: number;
+    errors: string[];
+  }> {
+    const result = {
+      success: true,
+      totalUpdated: 0,
+      errors: [] as string[],
+    };
+
+    try {
+      // Get all employees
+      const employees = await this.employeeRepository.findAll({});
+      console.log(`[EmployeeSyncService] Updating eligibility for ${employees.length} employees`);
+
+      const { EligibilityHelper } = await import('./utils/EligibilityHelper.js');
+
+      // Update each employee's voting eligibility
+      for (const employee of employees) {
+        try {
+          const isEligible = EligibilityHelper.isVotingEligible(employee, config);
+
+          // Only update if eligibility changed
+          if (employee.votingEligible !== isEligible) {
+            const updatedEmployee = {
+              ...employee,
+              votingEligible: isEligible,
+              updatedAt: new Date(),
+            };
+
+            await this.employeeRepository.update(employee.id, updatedEmployee);
+            result.totalUpdated++;
+          }
+        } catch (error) {
+          const errorMessage = `Error updating employee ${employee.id}: ${error instanceof Error ? error.message : String(error)}`;
+          result.errors.push(errorMessage);
+        }
+      }
+
+      console.log(
+        `[EmployeeSyncService] Eligibility updated: ${result.totalUpdated} employees modified`
+      );
+    } catch (error) {
+      result.success = false;
+      const errorMessage = `Error during eligibility update: ${error instanceof Error ? error.message : String(error)}`;
       result.errors.push(errorMessage);
     }
 
