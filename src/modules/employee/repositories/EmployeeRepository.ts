@@ -356,4 +356,38 @@ export class EmployeeRepository {
     const { resources } = await container.items.query<string>(querySpec).fetchAll();
     return resources;
   }
+
+  async getDistinctDepartments(): Promise<string[]> {
+    const container = await this.cosmosClient.getContainer(this.containerName);
+
+    const querySpec = {
+      query: `
+        SELECT DISTINCT VALUE c.department
+        FROM c
+        WHERE IS_DEFINED(c.department) AND c.department != null AND c.department != ""
+        ORDER BY c.department
+      `,
+      parameters: [],
+    };
+
+    const { resources } = await container.items.query<string>(querySpec).fetchAll();
+    return resources;
+  }
+
+  async getDistinctPositions(): Promise<string[]> {
+    const container = await this.cosmosClient.getContainer(this.containerName);
+
+    const querySpec = {
+      query: `
+        SELECT DISTINCT VALUE c.position
+        FROM c
+        WHERE IS_DEFINED(c.position) AND c.position != null AND c.position != ""
+        ORDER BY c.position
+      `,
+      parameters: [],
+    };
+
+    const { resources } = await container.items.query<string>(querySpec).fetchAll();
+    return resources;
+  }
 }
