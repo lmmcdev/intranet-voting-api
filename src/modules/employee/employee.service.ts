@@ -113,6 +113,14 @@ export class EmployeeService {
     return this.employeeRepository.getDistinctLocations();
   }
 
+  async getDepartments(): Promise<string[]> {
+    return this.employeeRepository.getDistinctDepartments();
+  }
+
+  async getPositions(): Promise<string[]> {
+    return this.employeeRepository.getDistinctPositions();
+  }
+
   async updateEmployee(id: string, updates: Partial<Employee>): Promise<Employee | null> {
     // Normalize name fields if they're being updated
     const normalizedUpdates = NameHelper.normalizeNameFields(updates);
@@ -187,7 +195,10 @@ export class EmployeeService {
         (normalizedUpdates as any).updatedAt = new Date();
 
         // Update the employee
-        const updatedEmployee = await this.employeeRepository.partialUpdate(item.id, normalizedUpdates);
+        const updatedEmployee = await this.employeeRepository.partialUpdate(
+          item.id,
+          normalizedUpdates
+        );
 
         if (updatedEmployee) {
           response.successful++;
@@ -246,7 +257,10 @@ export class EmployeeService {
     // Update each employee
     for (const employee of employees) {
       try {
-        const updatedEmployee = await this.employeeRepository.partialUpdate(employee.id, normalizedUpdates);
+        const updatedEmployee = await this.employeeRepository.partialUpdate(
+          employee.id,
+          normalizedUpdates
+        );
 
         if (updatedEmployee) {
           response.successful++;

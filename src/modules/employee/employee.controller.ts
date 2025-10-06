@@ -196,10 +196,7 @@ export class EmployeeController {
     }
   }
 
-  async getLocations(
-    request: HttpRequest,
-    context: InvocationContext
-  ): Promise<HttpResponseInit> {
+  async getLocations(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
     try {
       if (request.method !== 'GET') {
         return ResponseHelper.methodNotAllowed();
@@ -214,6 +211,47 @@ export class EmployeeController {
       return ResponseHelper.ok(locations);
     } catch (error) {
       context.error('Error getting locations:', error);
+      return ResponseHelper.internalServerError();
+    }
+  }
+
+  async getDepartments(
+    request: HttpRequest,
+    context: InvocationContext
+  ): Promise<HttpResponseInit> {
+    try {
+      if (request.method !== 'GET') {
+        return ResponseHelper.methodNotAllowed();
+      }
+
+      const authResult = await AuthHelper.requireAuth(request, context);
+      if (!authResult.success) {
+        return authResult.response;
+      }
+
+      const departments = await this.employeeService.getDepartments();
+      return ResponseHelper.ok(departments);
+    } catch (error) {
+      context.error('Error getting departments:', error);
+      return ResponseHelper.internalServerError();
+    }
+  }
+
+  async getPositions(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+    try {
+      if (request.method !== 'GET') {
+        return ResponseHelper.methodNotAllowed();
+      }
+
+      const authResult = await AuthHelper.requireAuth(request, context);
+      if (!authResult.success) {
+        return authResult.response;
+      }
+
+      const positions = await this.employeeService.getPositions();
+      return ResponseHelper.ok(positions);
+    } catch (error) {
+      context.error('Error getting positions:', error);
       return ResponseHelper.internalServerError();
     }
   }
@@ -632,6 +670,24 @@ const getLocationsFunction = async (
   return controller.getLocations(request, context);
 };
 
+const getDepartmentsFunction = async (
+  request: HttpRequest,
+  context: InvocationContext
+): Promise<HttpResponseInit> => {
+  const dependencies = await getDependencies();
+  const controller = new EmployeeController(dependencies.employeeService);
+  return controller.getDepartments(request, context);
+};
+
+const getPositionsFunction = async (
+  request: HttpRequest,
+  context: InvocationContext
+): Promise<HttpResponseInit> => {
+  const dependencies = await getDependencies();
+  const controller = new EmployeeController(dependencies.employeeService);
+  return controller.getPositions(request, context);
+};
+
 const exportEmployeesToCSVFunction = async (
   request: HttpRequest,
   context: InvocationContext
@@ -722,6 +778,20 @@ app.http('get-locations', {
   authLevel: 'anonymous',
   route: 'locations',
   handler: getLocationsFunction,
+});
+
+app.http('get-departments', {
+  methods: ['GET', 'OPTIONS'],
+  authLevel: 'anonymous',
+  route: 'departments',
+  handler: getDepartmentsFunction,
+});
+
+app.http('get-positions', {
+  methods: ['GET', 'OPTIONS'],
+  authLevel: 'anonymous',
+  route: 'positions',
+  handler: getPositionsFunction,
 });
 
 app.http('bulk-update-employees', {

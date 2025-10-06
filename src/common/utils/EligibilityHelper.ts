@@ -29,9 +29,19 @@ export class EligibilityHelper {
       return false;
     }
 
-    // Check excluded positions
+    // Check excluded positions (exact match)
     if (employee.position && config.excludedPositions.includes(employee.position)) {
       return false;
+    }
+
+    // Check excluded position keywords (partial match - case insensitive)
+    if (employee.position && config.excludedPositionKeywords.length > 0) {
+      const normalizedPosition = employee.position.toLowerCase();
+      for (const keyword of config.excludedPositionKeywords) {
+        if (normalizedPosition.includes(keyword.toLowerCase())) {
+          return false;
+        }
+      }
     }
 
     // Check custom rules
