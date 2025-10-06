@@ -4,6 +4,7 @@ export interface EligibilityConfig {
   excludedJobTitles: string[]; // Job titles that are excluded from voting
   excludedDepartments: string[]; // Departments excluded from voting
   excludedPositions: string[]; // Positions excluded from voting
+  excludedPositionKeywords: string[]; // Keywords in position field that exclude from voting (partial match)
   requireActiveStatus: boolean; // Only active employees are eligible (default: true)
   customRules?: {
     // Optional custom rules
@@ -21,6 +22,7 @@ export const DEFAULT_ELIGIBILITY_CONFIG: EligibilityConfig = {
   excludedJobTitles: [],
   excludedDepartments: [],
   excludedPositions: [],
+  excludedPositionKeywords: [],
   requireActiveStatus: true,
   customRules: {},
 };
