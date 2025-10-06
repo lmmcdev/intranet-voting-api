@@ -2,7 +2,11 @@ import { Nomination, NominationWithEmployee } from '../../../common/models/Nomin
 import { CreateNominationDto, Criteria } from '../dto/create-nomination.dto';
 import { UpdateNominationDto } from '../dto/update-nomination.dto';
 import { VotingPeriod, VotingPeriodStatus } from '../../../common/models/VotingPeriod';
-import { VoteResult, VotingPeriodResults, WinnersContainer } from '../../../common/models/VoteResult';
+import {
+  VoteResult,
+  VotingPeriodResults,
+  WinnersContainer,
+} from '../../../common/models/VoteResult';
 import { NominationRepository } from '../repositories/NominationRepository';
 import { VotingPeriodRepository } from '../repositories/VotingPeriodRepository';
 import { AzureEmployeeService } from '../../../common/AzureEmployeeService';
@@ -255,30 +259,30 @@ export class VotingService {
         }
 
         // In case of tie, sort by average criteria score
-        const avgA = (
-          a.averageCriteria.communication +
-          a.averageCriteria.innovation +
-          a.averageCriteria.leadership +
-          a.averageCriteria.problemSolving +
-          a.averageCriteria.reliability +
-          a.averageCriteria.teamwork
-        ) / 6;
+        const avgA =
+          (a.averageCriteria.communication +
+            a.averageCriteria.innovation +
+            a.averageCriteria.leadership +
+            a.averageCriteria.problemSolving +
+            a.averageCriteria.reliability +
+            a.averageCriteria.teamwork) /
+          6;
 
-        const avgB = (
-          b.averageCriteria.communication +
-          b.averageCriteria.innovation +
-          b.averageCriteria.leadership +
-          b.averageCriteria.problemSolving +
-          b.averageCriteria.reliability +
-          b.averageCriteria.teamwork
-        ) / 6;
+        const avgB =
+          (b.averageCriteria.communication +
+            b.averageCriteria.innovation +
+            b.averageCriteria.leadership +
+            b.averageCriteria.problemSolving +
+            b.averageCriteria.reliability +
+            b.averageCriteria.teamwork) /
+          6;
 
         return avgB - avgA;
       });
   }
 
   async updateNomination(
-    nominatorUserName: string,
+    nominationId: string,
     updateData: UpdateNominationDto
   ): Promise<Nomination> {
     const currentPeriod = await this.getCurrentVotingPeriod();
@@ -287,10 +291,11 @@ export class VotingService {
     }
 
     // Find existing nomination by nominator username and current voting period
-    const existingNomination = await this.nominationRepository.findByNominatorUsername(
+    /*  const existingNomination = await this.nominationRepository.findByNominatorUsername(
       nominatorUserName,
       currentPeriod.id
-    );
+    ); */
+    const existingNomination = await this.nominationRepository.findById(nominationId);
     if (!existingNomination) {
       throw new Error('No existing nomination found to update');
     }
