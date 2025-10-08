@@ -1,6 +1,7 @@
 import { Nomination, NominationWithEmployee } from '../../../common/models/Nomination';
 import { CreateNominationDto, Criteria } from '../dto/create-nomination.dto';
 import { UpdateNominationDto } from '../dto/update-nomination.dto';
+import { UpdateVotingPeriodDto } from '../dto/update-voting-period.dto';
 import { VotingPeriod, VotingPeriodStatus } from '../../../common/models/VotingPeriod';
 import {
   VoteResult,
@@ -444,6 +445,46 @@ export class VotingService {
     await this.nominationRepository.delete(id);
   }
 
+  async updateVotingPeriod(
+    votingPeriodId: string,
+    updateData: UpdateVotingPeriodDto
+  ): Promise<VotingPeriod> {
+    const period = await this.votingPeriodRepository.findById(votingPeriodId);
+    if (!period) {
+      throw new Error('Voting period not found');
+    }
+
+    // Validate that if changing year/month, no period exists for that combination
+    if (updateData.year !== undefined || updateData.month !== undefined) {
+      const targetYear = updateData.year ?? period.year;
+      const targetMonth = updateData.month ?? period.month;
+
+      // Only check if year or month is actually changing
+      if (targetYear !== period.year || targetMonth !== period.month) {
+        const existingPeriod = await this.votingPeriodRepository.findByYearAndMonth(
+          targetYear,
+          targetMonth
+        );
+        if (existingPeriod && existingPeriod.id !== votingPeriodId) {
+          throw new Error(`A voting period already exists for ${targetYear}-${targetMonth}`);
+        }
+      }
+    }
+
+    // Update only provided fields
+    const updatedPeriod: VotingPeriod = {
+      ...period,
+      ...(updateData.year !== undefined && { year: updateData.year }),
+      ...(updateData.month !== undefined && { month: updateData.month }),
+      ...(updateData.startDate !== undefined && { startDate: updateData.startDate }),
+      ...(updateData.endDate !== undefined && { endDate: updateData.endDate }),
+      ...(updateData.status !== undefined && { status: updateData.status }),
+      ...(updateData.description !== undefined && { description: updateData.description }),
+    };
+
+    return this.votingPeriodRepository.update(votingPeriodId, updatedPeriod);
+  }
+
   async closeVotingPeriod(votingPeriodId: string): Promise<VotingPeriod> {
     const period = await this.votingPeriodRepository.findById(votingPeriodId);
     if (!period) {
@@ -478,8 +519,8 @@ export class VotingService {
     // Save winners to history: general winner and all group winners
     await this.saveWinnersToHistory(votingPeriodId, winners, selectedWinner);
 
-    // Close the voting period
-    await this.closeVotingPeriod(votingPeriodId);
+    // Close the voting period commented out to allow manual closing later
+    //await this.closeVotingPeriod(votingPeriodId);
 
     return selectedWinner;
   }
