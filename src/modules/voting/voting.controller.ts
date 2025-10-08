@@ -1,6 +1,7 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { CreateNominationDto } from './dto/create-nomination.dto';
 import { UpdateNominationDto } from './dto/update-nomination.dto';
+import { UpdateVotingPeriodDto } from './dto/update-voting-period.dto';
 import { ResponseHelper } from '../../common/utils/ResponseHelper';
 import { getDependencies } from '../../common/utils/Dependencies';
 import { AuthHelper } from '../../common/utils/AuthHelper';
@@ -209,6 +210,40 @@ export class VotingController {
       return ResponseHelper.ok(results);
     } catch (error) {
       context.error('Error getting voting results:', error);
+      return ResponseHelper.internalServerError();
+    }
+  }
+
+  async updateVotingPeriod(
+    request: HttpRequest,
+    context: InvocationContext
+  ): Promise<HttpResponseInit> {
+    try {
+      if (request.method !== 'PUT') {
+        return ResponseHelper.methodNotAllowed();
+      }
+
+      const authResult = await AuthHelper.requireAuth(request, context);
+      if (!authResult.success) {
+        return authResult.response;
+      }
+
+      const votingPeriodId = request.params.votingPeriodId;
+      if (!votingPeriodId) {
+        return ResponseHelper.badRequest('Voting period ID is required');
+      }
+
+      const body = (await request.json()) as UpdateVotingPeriodDto;
+      const updatedPeriod = await this.dependencies.votingService.updateVotingPeriod(
+        votingPeriodId,
+        body
+      );
+      return ResponseHelper.ok(updatedPeriod);
+    } catch (error) {
+      context.error('Error updating voting period:', error);
+      if (error instanceof Error) {
+        return ResponseHelper.badRequest(error.message);
+      }
       return ResponseHelper.internalServerError();
     }
   }
@@ -534,6 +569,15 @@ const getVotingResultsFunction = async (
   return controller.getVotingResults(request, context);
 };
 
+const updateVotingPeriodFunction = async (
+  request: HttpRequest,
+  context: InvocationContext
+): Promise<HttpResponseInit> => {
+  const dependencies = await getDependencies();
+  const controller = new VotingController(dependencies);
+  return controller.updateVotingPeriod(request, context);
+};
+
 const closeVotingPeriodFunction = async (
   request: HttpRequest,
   context: InvocationContext
@@ -649,6 +693,13 @@ app.http('get-voting-results', {
   authLevel: 'anonymous',
   route: 'voting/{votingPeriodId}/results',
   handler: getVotingResultsFunction,
+});
+
+app.http('update-voting-period', {
+  methods: ['PUT', 'OPTIONS'],
+  authLevel: 'anonymous',
+  route: 'voting/{votingPeriodId}',
+  handler: updateVotingPeriodFunction,
 });
 
 app.http('close-voting-period', {
