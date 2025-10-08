@@ -6,6 +6,11 @@ export interface EligibilityConfig {
   excludedPositions: string[]; // Positions excluded from voting
   excludedPositionKeywords: string[]; // Keywords in position field that exclude from voting (partial match)
   requireActiveStatus: boolean; // Only active employees are eligible (default: true)
+  winnersFormula?: {
+    // Formula to calculate number of winners: topWinners = Math.round(totalVotes / divisor)
+    divisor: number; // Divide total votes by this number (e.g., 25 means 1 winner per 25 votes)
+    minWinners: number; // Minimum number of winners (e.g., 1)
+  };
   customRules?: {
     // Optional custom rules
     allowedCompanyCodes?: string[]; // If set, only these company codes are eligible
@@ -24,5 +29,9 @@ export const DEFAULT_ELIGIBILITY_CONFIG: EligibilityConfig = {
   excludedPositions: [],
   excludedPositionKeywords: [],
   requireActiveStatus: true,
+  winnersFormula: {
+    divisor: 25, // 1 winner per 25 votes
+    minWinners: 1, // At least 1 winner
+  },
   customRules: {},
 };

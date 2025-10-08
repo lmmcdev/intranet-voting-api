@@ -96,7 +96,8 @@ export async function getDependencies(): Promise<Dependencies> {
       azureEmployeeService,
       validationService,
       notificationService,
-      employeeService
+      employeeService,
+      configurationService
     );
     const authService = new AuthService(employeeRepository);
 

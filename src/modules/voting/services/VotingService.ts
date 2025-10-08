@@ -13,6 +13,7 @@ import { AzureEmployeeService } from '../../../common/AzureEmployeeService';
 import { ValidationService } from './ValidationService';
 import { NotificationService } from './NotificationService';
 import { EmployeeService } from '../../employee/employee.service';
+import { ConfigurationService } from '../../configuration/configuration.service';
 
 export class VotingService {
   private nominationRepository: NominationRepository;
@@ -21,6 +22,7 @@ export class VotingService {
   private validationService: ValidationService;
   private notificationService: NotificationService;
   private employeeService: EmployeeService;
+  private configurationService?: ConfigurationService;
 
   constructor(
     nominationRepository: NominationRepository,
@@ -28,7 +30,8 @@ export class VotingService {
     azureEmployeeService: AzureEmployeeService,
     validationService: ValidationService,
     notificationService: NotificationService,
-    employeeService: EmployeeService
+    employeeService: EmployeeService,
+    configurationService?: ConfigurationService
   ) {
     this.nominationRepository = nominationRepository;
     this.votingPeriodRepository = votingPeriodRepository;
@@ -36,6 +39,7 @@ export class VotingService {
     this.validationService = validationService;
     this.notificationService = notificationService;
     this.employeeService = employeeService;
+    this.configurationService = configurationService;
   }
 
   async createNomination(nominationData: CreateNominationDto): Promise<Nomination> {
@@ -141,6 +145,11 @@ export class VotingService {
     const allResults: VoteResult[] = [];
     const winnersByGroup: VoteResult[] = [];
 
+    // Get eligibility config for winners formula
+    const eligibilityConfig = this.configurationService
+      ? await this.configurationService.getEligibilityConfig()
+      : null;
+
     // Process each voting group separately
     for (const [votingGroup, groupNominations] of nominationsByGroup.entries()) {
       const employeeVotes = this.aggregateVotes(groupNominations);
@@ -166,10 +175,17 @@ export class VotingService {
 
       allResults.push(...groupResults);
 
-      // The first result in each group is the winner for that group
-      if (groupResults[0]) {
-        winnersByGroup.push(groupResults[0]);
+      // Calculate number of winners for this group using formula
+      let numberOfWinners = 1; // Default to 1 winner
+      if (eligibilityConfig?.winnersFormula) {
+        const formula = eligibilityConfig.winnersFormula;
+        numberOfWinners = Math.round(groupTotalNominations / formula.divisor);
+        numberOfWinners = Math.max(formula.minWinners, numberOfWinners);
       }
+
+      // Select top N winners for this group
+      const groupWinners = groupResults.slice(0, numberOfWinners);
+      winnersByGroup.push(...groupWinners);
     }
 
     const totalNominations = nominations.length;
@@ -364,7 +380,7 @@ export class VotingService {
     const winnersContainers: WinnersContainer[] = [];
 
     for (const period of recentPeriods) {
-      if (period.status === VotingPeriodStatus.CLOSED) {
+      if (period.status === VotingPeriodStatus.ACTIVE) {
         const results = await this.getVotingResults(period.id);
 
         if (results.winners && results.winners.length > 0) {
@@ -437,5 +453,23 @@ export class VotingService {
     period.endDate = new Date();
 
     return this.votingPeriodRepository.update(votingPeriodId, period);
+  }
+
+  async selectRandomWinnerFromAll(votingPeriodId: string): Promise<VoteResult> {
+    // Get voting results for the period
+    const results = await this.getVotingResults(votingPeriodId);
+
+    // Get all winners (one per voting group)
+    const winners = results.winners || [];
+
+    if (winners.length === 0) {
+      throw new Error('No winners found for this voting period');
+    }
+
+    // Select one random winner from all group winners
+    const randomIndex = Math.floor(Math.random() * winners.length);
+    const selectedWinner = winners[randomIndex];
+
+    return selectedWinner;
   }
 }
