@@ -7,8 +7,10 @@ import {
   VotingPeriodResults,
   WinnersContainer,
 } from '../../../common/models/VoteResult';
+import { WinnerHistory, WinnerType } from '../../../common/models/WinnerHistory';
 import { NominationRepository } from '../repositories/NominationRepository';
 import { VotingPeriodRepository } from '../repositories/VotingPeriodRepository';
+import { WinnerHistoryRepository } from '../repositories/WinnerHistoryRepository';
 import { AzureEmployeeService } from '../../../common/AzureEmployeeService';
 import { ValidationService } from './ValidationService';
 import { NotificationService } from './NotificationService';
@@ -18,6 +20,7 @@ import { ConfigurationService } from '../../configuration/configuration.service'
 export class VotingService {
   private nominationRepository: NominationRepository;
   private votingPeriodRepository: VotingPeriodRepository;
+  private winnerHistoryRepository: WinnerHistoryRepository;
   private azureEmployeeService: AzureEmployeeService;
   private validationService: ValidationService;
   private notificationService: NotificationService;
@@ -27,6 +30,7 @@ export class VotingService {
   constructor(
     nominationRepository: NominationRepository,
     votingPeriodRepository: VotingPeriodRepository,
+    winnerHistoryRepository: WinnerHistoryRepository,
     azureEmployeeService: AzureEmployeeService,
     validationService: ValidationService,
     notificationService: NotificationService,
@@ -35,6 +39,7 @@ export class VotingService {
   ) {
     this.nominationRepository = nominationRepository;
     this.votingPeriodRepository = votingPeriodRepository;
+    this.winnerHistoryRepository = winnerHistoryRepository;
     this.azureEmployeeService = azureEmployeeService;
     this.validationService = validationService;
     this.notificationService = notificationService;
@@ -470,6 +475,97 @@ export class VotingService {
     const randomIndex = Math.floor(Math.random() * winners.length);
     const selectedWinner = winners[randomIndex];
 
+    // Save winners to history: general winner and all group winners
+    await this.saveWinnersToHistory(votingPeriodId, winners, selectedWinner);
+
+    // Close the voting period
+    await this.closeVotingPeriod(votingPeriodId);
+
     return selectedWinner;
+  }
+
+  private async saveWinnersToHistory(
+    votingPeriodId: string,
+    winners: VoteResult[],
+    generalWinner: VoteResult
+  ): Promise<void> {
+    const period = await this.votingPeriodRepository.findById(votingPeriodId);
+    if (!period) {
+      throw new Error('Voting period not found');
+    }
+
+    // Delete existing winners for this period (in case of re-calculation)
+    await this.winnerHistoryRepository.deleteByVotingPeriod(votingPeriodId);
+
+    // Save the general winner (único ganador del período)
+    const generalWinnerHistory: WinnerHistory = {
+      id: this.generateId(),
+      votingPeriodId,
+      year: period.year,
+      month: period.month,
+      employeeId: generalWinner.employeeId,
+      employeeName: generalWinner.employeeName,
+      department: generalWinner.department,
+      position: generalWinner.position,
+      nominationCount: generalWinner.nominationCount,
+      percentage: generalWinner.percentage,
+      rank: generalWinner.rank,
+      averageCriteria: generalWinner.averageCriteria,
+      votingGroup: generalWinner.votingGroup,
+      winnerType: WinnerType.GENERAL,
+      createdAt: new Date(),
+    };
+    await this.winnerHistoryRepository.create(generalWinnerHistory);
+
+    // Save all group winners (ganadores por departamento/grupo)
+    for (const winner of winners) {
+      const groupWinnerHistory: WinnerHistory = {
+        id: this.generateId(),
+        votingPeriodId,
+        year: period.year,
+        month: period.month,
+        employeeId: winner.employeeId,
+        employeeName: winner.employeeName,
+        department: winner.department,
+        position: winner.position,
+        nominationCount: winner.nominationCount,
+        percentage: winner.percentage,
+        rank: winner.rank,
+        averageCriteria: winner.averageCriteria,
+        votingGroup: winner.votingGroup,
+        winnerType: WinnerType.BY_GROUP,
+        createdAt: new Date(),
+      };
+
+      await this.winnerHistoryRepository.create(groupWinnerHistory);
+    }
+  }
+
+  async getWinnerHistory(): Promise<WinnerHistory[]> {
+    return await this.winnerHistoryRepository.findAll();
+  }
+
+  async getWinnerHistoryByYear(year: number): Promise<WinnerHistory[]> {
+    return await this.winnerHistoryRepository.findByYear(year);
+  }
+
+  async getWinnerHistoryByYearAndMonth(year: number, month: number): Promise<WinnerHistory[]> {
+    return await this.winnerHistoryRepository.findByYearAndMonth(year, month);
+  }
+
+  async getYearlyWinners(): Promise<WinnerHistory[]> {
+    return await this.winnerHistoryRepository.findYearlyWinners();
+  }
+
+  async getYearlyWinnerByYear(year: number): Promise<WinnerHistory | null> {
+    return await this.winnerHistoryRepository.findYearlyWinnerByYear(year);
+  }
+
+  async markWinnerAsYearly(winnerId: string): Promise<WinnerHistory> {
+    return await this.winnerHistoryRepository.markAsYearlyWinner(winnerId);
+  }
+
+  async unmarkWinnerAsYearly(winnerId: string): Promise<WinnerHistory> {
+    return await this.winnerHistoryRepository.unmarkAsYearlyWinner(winnerId);
   }
 }

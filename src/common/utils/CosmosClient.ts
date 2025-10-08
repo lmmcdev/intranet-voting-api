@@ -41,7 +41,7 @@ export class CosmosClient {
   }
 
   async initializeContainers(): Promise<void> {
-    const containers = ["employees", "nominations", "votingPeriods"];
+    const containers = ["employees", "nominations", "votingPeriods", "winnerHistory"];
 
     for (const containerId of containers) {
       await this.getContainer(containerId);

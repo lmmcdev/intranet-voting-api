@@ -344,6 +344,135 @@ export class VotingController {
       return ResponseHelper.internalServerError();
     }
   }
+
+  async getWinnerHistory(
+    request: HttpRequest,
+    context: InvocationContext
+  ): Promise<HttpResponseInit> {
+    try {
+      if (request.method !== 'GET') {
+        return ResponseHelper.methodNotAllowed();
+      }
+
+      const authResult = await AuthHelper.requireAuth(request, context);
+      if (!authResult.success) {
+        return authResult.response;
+      }
+
+      const year = request.query.get('year');
+      const month = request.query.get('month');
+
+      let history;
+      if (year && month) {
+        history = await this.dependencies.votingService.getWinnerHistoryByYearAndMonth(
+          parseInt(year),
+          parseInt(month)
+        );
+      } else if (year) {
+        history = await this.dependencies.votingService.getWinnerHistoryByYear(parseInt(year));
+      } else {
+        history = await this.dependencies.votingService.getWinnerHistory();
+      }
+
+      return ResponseHelper.ok(history);
+    } catch (error) {
+      context.error('Error getting winner history:', error);
+      return ResponseHelper.internalServerError();
+    }
+  }
+
+  async getYearlyWinners(
+    request: HttpRequest,
+    context: InvocationContext
+  ): Promise<HttpResponseInit> {
+    try {
+      if (request.method !== 'GET') {
+        return ResponseHelper.methodNotAllowed();
+      }
+
+      const authResult = await AuthHelper.requireAuth(request, context);
+      if (!authResult.success) {
+        return authResult.response;
+      }
+
+      const year = request.query.get('year');
+
+      let yearlyWinners;
+      if (year) {
+        const winner = await this.dependencies.votingService.getYearlyWinnerByYear(
+          parseInt(year)
+        );
+        yearlyWinners = winner ? [winner] : [];
+      } else {
+        yearlyWinners = await this.dependencies.votingService.getYearlyWinners();
+      }
+
+      return ResponseHelper.ok(yearlyWinners);
+    } catch (error) {
+      context.error('Error getting yearly winners:', error);
+      return ResponseHelper.internalServerError();
+    }
+  }
+
+  async markYearlyWinner(
+    request: HttpRequest,
+    context: InvocationContext
+  ): Promise<HttpResponseInit> {
+    try {
+      if (request.method !== 'POST') {
+        return ResponseHelper.methodNotAllowed();
+      }
+
+      const authResult = await AuthHelper.requireAuth(request, context);
+      if (!authResult.success) {
+        return authResult.response;
+      }
+
+      const winnerId = request.params.winnerId;
+      if (!winnerId) {
+        return ResponseHelper.badRequest('Winner ID is required');
+      }
+
+      const yearlyWinner = await this.dependencies.votingService.markWinnerAsYearly(winnerId);
+      return ResponseHelper.ok(yearlyWinner);
+    } catch (error) {
+      context.error('Error marking yearly winner:', error);
+      if (error instanceof Error) {
+        return ResponseHelper.badRequest(error.message);
+      }
+      return ResponseHelper.internalServerError();
+    }
+  }
+
+  async unmarkYearlyWinner(
+    request: HttpRequest,
+    context: InvocationContext
+  ): Promise<HttpResponseInit> {
+    try {
+      if (request.method !== 'DELETE') {
+        return ResponseHelper.methodNotAllowed();
+      }
+
+      const authResult = await AuthHelper.requireAuth(request, context);
+      if (!authResult.success) {
+        return authResult.response;
+      }
+
+      const winnerId = request.params.winnerId;
+      if (!winnerId) {
+        return ResponseHelper.badRequest('Winner ID is required');
+      }
+
+      const winner = await this.dependencies.votingService.unmarkWinnerAsYearly(winnerId);
+      return ResponseHelper.ok(winner);
+    } catch (error) {
+      context.error('Error unmarking yearly winner:', error);
+      if (error instanceof Error) {
+        return ResponseHelper.badRequest(error.message);
+      }
+      return ResponseHelper.internalServerError();
+    }
+  }
 }
 
 // Azure Functions endpoints
@@ -450,6 +579,42 @@ const selectRandomWinnerFunction = async (
   return controller.selectRandomWinner(request, context);
 };
 
+const getWinnerHistoryFunction = async (
+  request: HttpRequest,
+  context: InvocationContext
+): Promise<HttpResponseInit> => {
+  const dependencies = await getDependencies();
+  const controller = new VotingController(dependencies);
+  return controller.getWinnerHistory(request, context);
+};
+
+const getYearlyWinnersFunction = async (
+  request: HttpRequest,
+  context: InvocationContext
+): Promise<HttpResponseInit> => {
+  const dependencies = await getDependencies();
+  const controller = new VotingController(dependencies);
+  return controller.getYearlyWinners(request, context);
+};
+
+const markYearlyWinnerFunction = async (
+  request: HttpRequest,
+  context: InvocationContext
+): Promise<HttpResponseInit> => {
+  const dependencies = await getDependencies();
+  const controller = new VotingController(dependencies);
+  return controller.markYearlyWinner(request, context);
+};
+
+const unmarkYearlyWinnerFunction = async (
+  request: HttpRequest,
+  context: InvocationContext
+): Promise<HttpResponseInit> => {
+  const dependencies = await getDependencies();
+  const controller = new VotingController(dependencies);
+  return controller.unmarkYearlyWinner(request, context);
+};
+
 // Register Azure Functions
 app.http('create-nomination', {
   methods: ['POST', 'OPTIONS'],
@@ -519,4 +684,32 @@ app.http('select-random-winner', {
   authLevel: 'anonymous',
   route: 'voting/{votingPeriodId}/select-winner',
   handler: selectRandomWinnerFunction,
+});
+
+app.http('get-winner-history', {
+  methods: ['GET', 'OPTIONS'],
+  authLevel: 'anonymous',
+  route: 'voting/winners/history',
+  handler: getWinnerHistoryFunction,
+});
+
+app.http('get-yearly-winners', {
+  methods: ['GET', 'OPTIONS'],
+  authLevel: 'anonymous',
+  route: 'voting/winners/yearly',
+  handler: getYearlyWinnersFunction,
+});
+
+app.http('mark-yearly-winner', {
+  methods: ['POST', 'OPTIONS'],
+  authLevel: 'anonymous',
+  route: 'voting/winners/{winnerId}/yearly',
+  handler: markYearlyWinnerFunction,
+});
+
+app.http('unmark-yearly-winner', {
+  methods: ['DELETE', 'OPTIONS'],
+  authLevel: 'anonymous',
+  route: 'voting/winners/{winnerId}/yearly',
+  handler: unmarkYearlyWinnerFunction,
 });

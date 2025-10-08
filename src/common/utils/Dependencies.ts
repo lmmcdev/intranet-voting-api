@@ -2,6 +2,7 @@ import { CosmosClient } from './CosmosClient';
 import { EmployeeRepository } from '../../modules/employee/repositories/EmployeeRepository';
 import { NominationRepository } from '../../modules/voting/repositories/NominationRepository';
 import { VotingPeriodRepository } from '../../modules/voting/repositories/VotingPeriodRepository';
+import { WinnerHistoryRepository } from '../../modules/voting/repositories/WinnerHistoryRepository';
 import { EligibilityConfigRepository } from '../../modules/configuration/repositories/EligibilityConfigRepository';
 import { VotingGroupConfigRepository } from '../../modules/configuration/repositories/VotingGroupConfigRepository';
 import { EmployeeDirectoryService } from '../../modules/employee/services/EmployeeDirectoryService';
@@ -26,6 +27,7 @@ interface Dependencies {
   employeeRepository: EmployeeRepository;
   nominationRepository: NominationRepository;
   votingPeriodRepository: VotingPeriodRepository;
+  winnerHistoryRepository: WinnerHistoryRepository;
   eligibilityConfigRepository: EligibilityConfigRepository;
   votingGroupConfigRepository: VotingGroupConfigRepository;
   employeeService: EmployeeService;
@@ -61,6 +63,7 @@ export async function getDependencies(): Promise<Dependencies> {
     const employeeRepository = new EmployeeRepository(cosmosClient);
     const nominationRepository = new NominationRepository(cosmosClient);
     const votingPeriodRepository = new VotingPeriodRepository(cosmosClient);
+    const winnerHistoryRepository = new WinnerHistoryRepository(cosmosClient);
     const eligibilityConfigRepository = new EligibilityConfigRepository(cosmosClient);
     const votingGroupConfigRepository = new VotingGroupConfigRepository(cosmosClient);
 
@@ -93,6 +96,7 @@ export async function getDependencies(): Promise<Dependencies> {
     const votingService = new VotingService(
       nominationRepository,
       votingPeriodRepository,
+      winnerHistoryRepository,
       azureEmployeeService,
       validationService,
       notificationService,
@@ -106,6 +110,7 @@ export async function getDependencies(): Promise<Dependencies> {
       employeeRepository,
       nominationRepository,
       votingPeriodRepository,
+      winnerHistoryRepository,
       eligibilityConfigRepository,
       votingGroupConfigRepository,
       employeeService,
