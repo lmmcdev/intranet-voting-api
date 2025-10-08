@@ -313,6 +313,37 @@ export class VotingController {
       return ResponseHelper.internalServerError();
     }
   }
+
+  async selectRandomWinner(
+    request: HttpRequest,
+    context: InvocationContext
+  ): Promise<HttpResponseInit> {
+    try {
+      if (request.method !== 'GET') {
+        return ResponseHelper.methodNotAllowed();
+      }
+
+      const authResult = await AuthHelper.requireAuth(request, context);
+      if (!authResult.success) {
+        return authResult.response;
+      }
+
+      const votingPeriodId = request.params.votingPeriodId;
+      if (!votingPeriodId) {
+        return ResponseHelper.badRequest('Voting period ID is required');
+      }
+
+      const winner =
+        await this.dependencies.votingService.selectRandomWinnerFromAll(votingPeriodId);
+      return ResponseHelper.ok(winner);
+    } catch (error) {
+      context.error('Error selecting random winner:', error);
+      if (error instanceof Error) {
+        return ResponseHelper.badRequest(error.message);
+      }
+      return ResponseHelper.internalServerError();
+    }
+  }
 }
 
 // Azure Functions endpoints
@@ -410,6 +441,15 @@ const getMyNominationsFunction = async (
   return controller.getMyNominations(request, context);
 };
 
+const selectRandomWinnerFunction = async (
+  request: HttpRequest,
+  context: InvocationContext
+): Promise<HttpResponseInit> => {
+  const dependencies = await getDependencies();
+  const controller = new VotingController(dependencies);
+  return controller.selectRandomWinner(request, context);
+};
+
 // Register Azure Functions
 app.http('create-nomination', {
   methods: ['POST', 'OPTIONS'],
@@ -428,7 +468,7 @@ app.http('nomination-by-id', {
 app.http('get-current-voting', {
   methods: ['GET', 'OPTIONS'],
   authLevel: 'anonymous',
-  route: 'voting/current',
+  route: 'voting/current-period',
   handler: getCurrentVotingFunction,
 });
 
@@ -472,4 +512,11 @@ app.http('get-my-nominations', {
   authLevel: 'anonymous',
   route: 'nominations/my',
   handler: getMyNominationsFunction,
+});
+
+app.http('select-random-winner', {
+  methods: ['GET', 'OPTIONS'],
+  authLevel: 'anonymous',
+  route: 'voting/{votingPeriodId}/select-winner',
+  handler: selectRandomWinnerFunction,
 });
