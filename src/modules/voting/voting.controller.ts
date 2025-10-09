@@ -508,6 +508,38 @@ export class VotingController {
       return ResponseHelper.internalServerError();
     }
   }
+
+  async getEmployeeResults(
+    request: HttpRequest,
+    context: InvocationContext
+  ): Promise<HttpResponseInit> {
+    try {
+      if (request.method !== 'GET') {
+        return ResponseHelper.methodNotAllowed();
+      }
+
+      const authResult = await AuthHelper.requireAuth(request, context);
+      if (!authResult.success) {
+        return authResult.response;
+      }
+
+      const employeeId = request.params.employeeId;
+      if (!employeeId) {
+        return ResponseHelper.badRequest('Employee ID is required');
+      }
+
+      const votingPeriodId = request.query.get('votingPeriodId');
+
+      const results = await this.dependencies.votingService.getEmployeeResults(
+        employeeId,
+        votingPeriodId || undefined
+      );
+      return ResponseHelper.ok(results);
+    } catch (error) {
+      context.error('Error getting employee results:', error);
+      return ResponseHelper.internalServerError();
+    }
+  }
 }
 
 // Azure Functions endpoints
@@ -659,6 +691,15 @@ const unmarkYearlyWinnerFunction = async (
   return controller.unmarkYearlyWinner(request, context);
 };
 
+const getEmployeeResultsFunction = async (
+  request: HttpRequest,
+  context: InvocationContext
+): Promise<HttpResponseInit> => {
+  const dependencies = await getDependencies();
+  const controller = new VotingController(dependencies);
+  return controller.getEmployeeResults(request, context);
+};
+
 // Register Azure Functions
 app.http('create-nomination', {
   methods: ['POST', 'OPTIONS'],
@@ -763,4 +804,11 @@ app.http('unmark-yearly-winner', {
   authLevel: 'anonymous',
   route: 'voting/winners/{winnerId}/yearly',
   handler: unmarkYearlyWinnerFunction,
+});
+
+app.http('get-employee-results', {
+  methods: ['GET', 'OPTIONS'],
+  authLevel: 'anonymous',
+  route: 'voting/employees/{employeeId}/results',
+  handler: getEmployeeResultsFunction,
 });
