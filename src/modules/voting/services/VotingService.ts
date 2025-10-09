@@ -154,9 +154,7 @@ export class VotingService {
     const uniqueEmployeeIds = [...new Set(nominations.map(n => n.nominatedEmployeeId))];
 
     // Fetch all employees in parallel
-    const employeePromises = uniqueEmployeeIds.map(id =>
-      this.employeeService.getEmployeeById(id)
-    );
+    const employeePromises = uniqueEmployeeIds.map(id => this.employeeService.getEmployeeById(id));
     const employees = await Promise.all(employeePromises);
 
     // Create a map for quick employee lookup
@@ -568,7 +566,7 @@ export class VotingService {
     await this.saveWinnersToHistory(votingPeriodId, winners, selectedWinner);
 
     // Close the voting period commented out to allow manual closing later
-    //await this.closeVotingPeriod(votingPeriodId);
+    await this.closeVotingPeriod(votingPeriodId);
 
     return selectedWinner;
   }
@@ -658,7 +656,10 @@ export class VotingService {
     return await this.winnerHistoryRepository.unmarkAsYearlyWinner(winnerId);
   }
 
-  async getEmployeeResults(employeeId: string, votingPeriodId?: string): Promise<NominationWithEmployee[]> {
+  async getEmployeeResults(
+    employeeId: string,
+    votingPeriodId?: string
+  ): Promise<NominationWithEmployee[]> {
     let nominations: Nomination[] = [];
 
     if (votingPeriodId) {
@@ -696,5 +697,111 @@ export class VotingService {
     }
 
     return nominationsWithEmployee;
+  }
+
+  /**
+   * Create bulk nominations for testing purposes
+   * @param count Number of nominations to create
+   * @returns Summary of created nominations
+   */
+  async createBulkNominationsForTesting(count: number): Promise<{
+    success: boolean;
+    created: number;
+    failed: number;
+    errors: string[];
+    nominations: Nomination[];
+  }> {
+    const result = {
+      success: false,
+      created: 0,
+      failed: 0,
+      errors: [] as string[],
+      nominations: [] as Nomination[],
+    };
+
+    try {
+      // Get current voting period
+      const currentPeriod = await this.getCurrentVotingPeriod();
+      if (!currentPeriod) {
+        result.errors.push('No active voting period found');
+        return result;
+      }
+
+      // Get eligible employees (both nominators and nominees)
+      const { employees: allEmployees } = await this.employeeService.getEmployees({
+        isActive: true,
+      });
+
+      if (allEmployees.length < 2) {
+        result.errors.push('Not enough employees to create nominations');
+        return result;
+      }
+
+      // Create nominations
+      for (let i = 0; i < count; i++) {
+        try {
+          // Random nominator
+          const nominator = allEmployees[Math.floor(Math.random() * allEmployees.length)];
+
+          // Random nominee (different from nominator)
+          let nominee;
+          do {
+            nominee = allEmployees[Math.floor(Math.random() * allEmployees.length)];
+          } while (nominee.id === nominator.id);
+
+          // Random criteria scores (1-5)
+          const criteria: Criteria = {
+            communication: Math.floor(Math.random() * 5) + 1,
+            innovation: Math.floor(Math.random() * 5) + 1,
+            leadership: Math.floor(Math.random() * 5) + 1,
+            problemSolving: Math.floor(Math.random() * 5) + 1,
+            reliability: Math.floor(Math.random() * 5) + 1,
+            teamwork: Math.floor(Math.random() * 5) + 1,
+          };
+
+          const reasons = [
+            'Outstanding performance and dedication to the team',
+            'Excellent problem-solving skills and innovation',
+            'Great leadership and mentoring abilities',
+            'Exceptional teamwork and collaboration',
+            'Consistent reliability and quality work',
+            'Strong communication and interpersonal skills',
+            'Goes above and beyond to help colleagues',
+            'Demonstrates exceptional technical expertise',
+            'Shows great initiative and proactive attitude',
+            'Maintains positive attitude and motivates others',
+          ];
+
+          const nomination: Nomination = {
+            id: this.generateId(),
+            nominatedEmployeeId: nominee.id,
+            nominatorUserName: nominator.fullName || `test-user-${i}`,
+            nominatorUserId: nominator.id,
+            reason: reasons[Math.floor(Math.random() * reasons.length)],
+            criteria,
+            votingPeriodId: currentPeriod.id,
+            createdAt: new Date(),
+          };
+
+          const created = await this.nominationRepository.create(nomination);
+          result.nominations.push(created);
+          result.created++;
+        } catch (error) {
+          result.failed++;
+          result.errors.push(
+            error instanceof Error ? error.message : `Failed to create nomination ${i + 1}`
+          );
+        }
+      }
+
+      // Invalidate cache
+      this.cacheService.delete(`voting-results:${currentPeriod.id}`);
+
+      result.success = result.created > 0;
+      return result;
+    } catch (error) {
+      result.errors.push(error instanceof Error ? error.message : 'Unknown error occurred');
+      return result;
+    }
   }
 }
