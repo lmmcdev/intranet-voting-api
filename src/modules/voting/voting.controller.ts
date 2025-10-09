@@ -540,6 +540,49 @@ export class VotingController {
       return ResponseHelper.internalServerError();
     }
   }
+
+  async createBulkNominationsForTesting(
+    request: HttpRequest,
+    context: InvocationContext
+  ): Promise<HttpResponseInit> {
+    try {
+      if (request.method !== 'POST') {
+        return ResponseHelper.methodNotAllowed();
+      }
+
+      const authResult = await AuthHelper.requireAuth(request, context);
+      if (!authResult.success) {
+        return authResult.response;
+      }
+
+      // Only admins can use this endpoint
+      const user = authResult.user;
+      if (!user.roles?.includes('admin')) {
+        return ResponseHelper.forbidden('Admin access required');
+      }
+
+      const body = (await request.json()) as { count?: number };
+      const count = body.count || 10;
+
+      if (count < 1 || count > 1000) {
+        return ResponseHelper.badRequest('Count must be between 1 and 1000');
+      }
+
+      const result = await this.dependencies.votingService.createBulkNominationsForTesting(count);
+
+      context.log(
+        `Admin ${user.email} created ${result.created} bulk nominations for testing (${result.failed} failed)`
+      );
+
+      return ResponseHelper.ok(result);
+    } catch (error) {
+      context.error('Error creating bulk nominations:', error);
+      if (error instanceof Error) {
+        return ResponseHelper.badRequest(error.message);
+      }
+      return ResponseHelper.internalServerError();
+    }
+  }
 }
 
 // Azure Functions endpoints
@@ -700,6 +743,15 @@ const getEmployeeResultsFunction = async (
   return controller.getEmployeeResults(request, context);
 };
 
+const createBulkNominationsForTestingFunction = async (
+  request: HttpRequest,
+  context: InvocationContext
+): Promise<HttpResponseInit> => {
+  const dependencies = await getDependencies();
+  const controller = new VotingController(dependencies);
+  return controller.createBulkNominationsForTesting(request, context);
+};
+
 // Register Azure Functions
 app.http('create-nomination', {
   methods: ['POST', 'OPTIONS'],
@@ -811,4 +863,11 @@ app.http('get-employee-results', {
   authLevel: 'anonymous',
   route: 'voting/employees/{employeeId}/results',
   handler: getEmployeeResultsFunction,
+});
+
+app.http('create-bulk-nominations-testing', {
+  methods: ['POST', 'OPTIONS'],
+  authLevel: 'anonymous',
+  route: 'voting/testing/bulk-nominations',
+  handler: createBulkNominationsForTestingFunction,
 });
