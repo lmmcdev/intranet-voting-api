@@ -171,7 +171,7 @@ export class VotingService {
             department: employee?.department || 'Unknown',
             position: employee?.position || 'Unknown',
             nominationCount: vote.count,
-            percentage: (vote.count / groupTotalNominations) * 100,
+            percentage: Math.round((vote.count / groupTotalNominations) * 100 * 100) / 100,
             rank: index + 1,
             averageCriteria: vote.averageCriteria,
             votingGroup: votingGroup === 'default' ? undefined : votingGroup,
@@ -608,5 +608,45 @@ export class VotingService {
 
   async unmarkWinnerAsYearly(winnerId: string): Promise<WinnerHistory> {
     return await this.winnerHistoryRepository.unmarkAsYearlyWinner(winnerId);
+  }
+
+  async getEmployeeResults(employeeId: string, votingPeriodId?: string): Promise<NominationWithEmployee[]> {
+    let nominations: Nomination[] = [];
+
+    if (votingPeriodId) {
+      // Get nominations for specific voting period
+      nominations = await this.nominationRepository.findByVotingPeriod(votingPeriodId);
+    } else {
+      // Get nominations for all recent periods
+      const recentPeriods = await this.votingPeriodRepository.findRecentPeriods();
+
+      for (const period of recentPeriods) {
+        const periodNominations = await this.nominationRepository.findByVotingPeriod(period.id);
+        nominations.push(...periodNominations);
+      }
+    }
+
+    // Filter nominations for this specific employee
+    const employeeNominations = nominations.filter(
+      nomination => nomination.nominatedEmployeeId === employeeId
+    );
+
+    // Get employee details and convert to NominationWithEmployee
+    const nominationsWithEmployee: NominationWithEmployee[] = [];
+
+    for (const nomination of employeeNominations) {
+      const employee = await this.employeeService.getEmployeeById(nomination.nominatedEmployeeId);
+
+      nominationsWithEmployee.push({
+        ...nomination,
+        nominatedEmployee: {
+          fullName: employee?.fullName || 'Unknown Employee',
+          department: employee?.department || 'Unknown',
+          position: employee?.position || 'Unknown',
+        },
+      });
+    }
+
+    return nominationsWithEmployee;
   }
 }
