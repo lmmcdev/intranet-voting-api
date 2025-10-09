@@ -136,10 +136,25 @@ export class VotingService {
 
     const nominations = await this.nominationRepository.findByVotingPeriod(votingPeriodId);
 
+    // Get all unique employee IDs from nominations
+    const uniqueEmployeeIds = [...new Set(nominations.map(n => n.nominatedEmployeeId))];
+
+    // Fetch all employees in parallel
+    const employeePromises = uniqueEmployeeIds.map(id =>
+      this.employeeService.getEmployeeById(id)
+    );
+    const employees = await Promise.all(employeePromises);
+
+    // Create a map for quick employee lookup
+    const employeeMap = new Map();
+    uniqueEmployeeIds.forEach((id, index) => {
+      employeeMap.set(id, employees[index]);
+    });
+
     // Group nominations by votingGroup
     const nominationsByGroup = new Map<string, typeof nominations>();
     for (const nomination of nominations) {
-      const employee = await this.employeeService.getEmployeeById(nomination.nominatedEmployeeId);
+      const employee = employeeMap.get(nomination.nominatedEmployeeId);
       const votingGroup = employee?.votingGroup || 'default';
 
       if (!nominationsByGroup.has(votingGroup)) {
@@ -161,23 +176,21 @@ export class VotingService {
       const employeeVotes = this.aggregateVotes(groupNominations);
       const groupTotalNominations = groupNominations.length;
 
-      const groupResults: VoteResult[] = await Promise.all(
-        employeeVotes.map(async (vote, index) => {
-          const employee = await this.employeeService.getEmployeeById(vote.employeeId);
-          return {
-            votingPeriodId,
-            employeeId: vote.employeeId,
-            employeeName: employee?.fullName || 'Unknown',
-            department: employee?.department || 'Unknown',
-            position: employee?.position || 'Unknown',
-            nominationCount: vote.count,
-            percentage: Math.round((vote.count / groupTotalNominations) * 100 * 100) / 100,
-            rank: index + 1,
-            averageCriteria: vote.averageCriteria,
-            votingGroup: votingGroup === 'default' ? undefined : votingGroup,
-          };
-        })
-      );
+      const groupResults: VoteResult[] = employeeVotes.map((vote, index) => {
+        const employee = employeeMap.get(vote.employeeId);
+        return {
+          votingPeriodId,
+          employeeId: vote.employeeId,
+          employeeName: employee?.fullName || 'Unknown',
+          department: employee?.department || 'Unknown',
+          position: employee?.position || 'Unknown',
+          nominationCount: vote.count,
+          percentage: Math.round((vote.count / groupTotalNominations) * 100 * 100) / 100,
+          rank: index + 1,
+          averageCriteria: vote.averageCriteria,
+          votingGroup: votingGroup === 'default' ? undefined : votingGroup,
+        };
+      });
 
       allResults.push(...groupResults);
 
@@ -385,8 +398,10 @@ export class VotingService {
     const recentPeriods = await this.votingPeriodRepository.findRecentPeriods();
     const winnersContainers: WinnersContainer[] = [];
 
-    for (const period of recentPeriods) {
-      if (period.status === VotingPeriodStatus.ACTIVE) {
+    // Process periods in parallel
+    const containerPromises = recentPeriods
+      .filter(period => period.status === VotingPeriodStatus.ACTIVE)
+      .map(async period => {
         const results = await this.getVotingResults(period.id);
 
         if (results.winners && results.winners.length > 0) {
@@ -395,15 +410,18 @@ export class VotingService {
             winner,
           }));
 
-          winnersContainers.push({
+          return {
             votingPeriodId: period.id,
             year: period.year,
             month: period.month,
             winnersByGroup,
-          });
+          };
         }
-      }
-    }
+        return null;
+      });
+
+    const containers = await Promise.all(containerPromises);
+    winnersContainers.push(...containers.filter((c): c is WinnersContainer => c !== null));
 
     return winnersContainers;
   }
