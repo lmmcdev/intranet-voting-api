@@ -17,6 +17,7 @@ import { ValidationService } from './ValidationService';
 import { NotificationService } from './NotificationService';
 import { EmployeeService } from '../../employee/employee.service';
 import { ConfigurationService } from '../../configuration/configuration.service';
+import { CacheService } from '../../../common/services/CacheService';
 
 export class VotingService {
   private nominationRepository: NominationRepository;
@@ -27,6 +28,7 @@ export class VotingService {
   private notificationService: NotificationService;
   private employeeService: EmployeeService;
   private configurationService?: ConfigurationService;
+  private cacheService: CacheService;
 
   constructor(
     nominationRepository: NominationRepository,
@@ -36,7 +38,8 @@ export class VotingService {
     validationService: ValidationService,
     notificationService: NotificationService,
     employeeService: EmployeeService,
-    configurationService?: ConfigurationService
+    configurationService?: ConfigurationService,
+    cacheService?: CacheService
   ) {
     this.nominationRepository = nominationRepository;
     this.votingPeriodRepository = votingPeriodRepository;
@@ -46,6 +49,7 @@ export class VotingService {
     this.notificationService = notificationService;
     this.employeeService = employeeService;
     this.configurationService = configurationService;
+    this.cacheService = cacheService || new CacheService(5 * 60 * 1000); // 5 minutes default
   }
 
   async createNomination(nominationData: CreateNominationDto): Promise<Nomination> {
@@ -72,6 +76,9 @@ export class VotingService {
     };
 
     const createdNomination = await this.nominationRepository.create(nomination);
+
+    // Invalidate cache for this voting period
+    this.cacheService.delete(`voting-results:${currentPeriod.id}`);
 
     try {
       const nominatedEmployee = await this.employeeService.getEmployeeById(
@@ -129,6 +136,13 @@ export class VotingService {
   }
 
   async getVotingResults(votingPeriodId: string): Promise<VotingPeriodResults> {
+    // Try to get from cache first
+    const cacheKey = `voting-results:${votingPeriodId}`;
+    const cached = this.cacheService.get<VotingPeriodResults>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     const votingPeriod = await this.votingPeriodRepository.findById(votingPeriodId);
     if (!votingPeriod) {
       throw new Error('Voting period not found');
@@ -228,7 +242,7 @@ export class VotingService {
       return a.rank - b.rank;
     });
 
-    return {
+    const results = {
       votingPeriod: {
         id: votingPeriod.id,
         year: votingPeriod.year,
@@ -241,6 +255,11 @@ export class VotingService {
       winner: winnersByGroup[0], // For backwards compatibility, return first winner
       winners: winnersByGroup,
     };
+
+    // Cache the results for 5 minutes
+    this.cacheService.set(cacheKey, results, 5 * 60 * 1000);
+
+    return results;
   }
 
   private aggregateVotes(
@@ -367,6 +386,9 @@ export class VotingService {
       updatedAt: new Date(),
     };
 
+    // Invalidate cache for this voting period
+    this.cacheService.delete(`voting-results:${existingNomination.votingPeriodId}`);
+
     return await this.nominationRepository.update(existingNomination.id, updatedNomination);
   }
 
@@ -460,7 +482,15 @@ export class VotingService {
   }
 
   async deleteNomination(id: string): Promise<void> {
+    // Get the nomination first to know which voting period cache to invalidate
+    const nomination = await this.nominationRepository.findById(id);
+
     await this.nominationRepository.delete(id);
+
+    // Invalidate cache if nomination existed
+    if (nomination) {
+      this.cacheService.delete(`voting-results:${nomination.votingPeriodId}`);
+    }
   }
 
   async updateVotingPeriod(

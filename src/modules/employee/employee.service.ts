@@ -9,13 +9,19 @@ import {
   BulkUpdateByFilterDto,
 } from './dto/bulk-update-employee.dto';
 import { NameHelper } from '../../common/utils/NameHelper';
+import { CacheService } from '../../common/services/CacheService';
 
 export class EmployeeService {
+  private cacheService: CacheService;
+
   constructor(
     private readonly employeeRepository: EmployeeRepository,
     private readonly configurationService?: ConfigurationService,
-    private readonly votingGroupService?: VotingGroupService
-  ) {}
+    private readonly votingGroupService?: VotingGroupService,
+    cacheService?: CacheService
+  ) {
+    this.cacheService = cacheService || new CacheService(10 * 60 * 1000); // 10 minutes default for employees
+  }
 
   async getEmployees(
     filters?: {
@@ -38,7 +44,13 @@ export class EmployeeService {
   }
 
   async getEmployeeById(id: string): Promise<Employee | null> {
-    return this.employeeRepository.findById(id);
+    const cacheKey = `employee:${id}`;
+
+    return this.cacheService.getOrSet(
+      cacheKey,
+      () => this.employeeRepository.findById(id),
+      10 * 60 * 1000 // 10 minutes
+    );
   }
 
   async getEmployeeCount(): Promise<number> {
@@ -124,7 +136,14 @@ export class EmployeeService {
   async updateEmployee(id: string, updates: Partial<Employee>): Promise<Employee | null> {
     // Normalize name fields if they're being updated
     const normalizedUpdates = NameHelper.normalizeNameFields(updates);
-    return this.employeeRepository.partialUpdate(id, normalizedUpdates);
+    const updatedEmployee = await this.employeeRepository.partialUpdate(id, normalizedUpdates);
+
+    // Invalidate cache for this employee
+    if (updatedEmployee) {
+      this.cacheService.delete(`employee:${id}`);
+    }
+
+    return updatedEmployee;
   }
 
   async getEmployeeByEmail(email: string): Promise<Employee | null> {
