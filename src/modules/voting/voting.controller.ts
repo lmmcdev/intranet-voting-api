@@ -187,6 +187,38 @@ export class VotingController {
     }
   }
 
+  async getVotingPeriodById(
+    request: HttpRequest,
+    context: InvocationContext
+  ): Promise<HttpResponseInit> {
+    try {
+      if (request.method !== 'GET') {
+        return ResponseHelper.methodNotAllowed();
+      }
+
+      const authResult = await AuthHelper.requireAuth(request, context);
+      if (!authResult.success) {
+        return authResult.response;
+      }
+
+      const votingPeriodId = request.params.votingPeriodId;
+      if (!votingPeriodId) {
+        return ResponseHelper.badRequest('Voting period ID is required');
+      }
+
+      const period = await this.dependencies.votingService.getVotingPeriodById(votingPeriodId);
+
+      if (!period) {
+        return ResponseHelper.notFound('Voting period not found');
+      }
+
+      return ResponseHelper.ok(period);
+    } catch (error) {
+      context.error('Error getting voting period by ID:', error);
+      return ResponseHelper.internalServerError();
+    }
+  }
+
   async getVotingResults(
     request: HttpRequest,
     context: InvocationContext
@@ -278,6 +310,50 @@ export class VotingController {
     }
   }
 
+  async resetVotingPeriod(
+    request: HttpRequest,
+    context: InvocationContext
+  ): Promise<HttpResponseInit> {
+    try {
+      if (request.method !== 'POST') {
+        return ResponseHelper.methodNotAllowed();
+      }
+
+      const authResult = await AuthHelper.requireAuth(request, context);
+      if (!authResult.success) {
+        return authResult.response;
+      }
+
+      // Only admins can reset voting periods
+      const user = authResult.user;
+      if (!user.roles?.includes('admin')) {
+        return ResponseHelper.forbidden('Admin access required');
+      }
+
+      const votingPeriodId = request.params.votingPeriodId;
+      if (!votingPeriodId) {
+        return ResponseHelper.badRequest('Voting period ID is required');
+      }
+
+      const result = await this.dependencies.votingService.resetVotingPeriod(votingPeriodId);
+
+      if (result.success) {
+        context.log(
+          `Admin ${user.email} reset voting period ${votingPeriodId}: ${result.nominationsDeleted} nominations and ${result.winnersDeleted} winners deleted`
+        );
+        return ResponseHelper.ok(result);
+      } else {
+        return ResponseHelper.badRequest(result.message);
+      }
+    } catch (error) {
+      context.error('Error resetting voting period:', error);
+      if (error instanceof Error) {
+        return ResponseHelper.badRequest(error.message);
+      }
+      return ResponseHelper.internalServerError();
+    }
+  }
+
   async getWinners(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
     try {
       if (request.method !== 'GET') {
@@ -293,6 +369,33 @@ export class VotingController {
       return ResponseHelper.ok(winners);
     } catch (error) {
       context.error('Error getting winners:', error);
+      return ResponseHelper.internalServerError();
+    }
+  }
+
+  async getCurrentWinner(
+    request: HttpRequest,
+    context: InvocationContext
+  ): Promise<HttpResponseInit> {
+    try {
+      if (request.method !== 'GET') {
+        return ResponseHelper.methodNotAllowed();
+      }
+
+      const authResult = await AuthHelper.requireAuth(request, context);
+      if (!authResult.success) {
+        return authResult.response;
+      }
+
+      const winner = await this.dependencies.votingService.getCurrentWinner();
+
+      if (!winner) {
+        return ResponseHelper.notFound('No current winner found. No closed voting periods available.');
+      }
+
+      return ResponseHelper.ok(winner);
+    } catch (error) {
+      context.error('Error getting current winner:', error);
       return ResponseHelper.internalServerError();
     }
   }
@@ -396,15 +499,20 @@ export class VotingController {
 
       const year = request.query.get('year');
       const month = request.query.get('month');
+      const winnerType = request.query.get('winnerType');
 
       let history;
       if (year && month) {
         history = await this.dependencies.votingService.getWinnerHistoryByYearAndMonth(
           parseInt(year),
-          parseInt(month)
+          parseInt(month),
+          winnerType || undefined
         );
       } else if (year) {
-        history = await this.dependencies.votingService.getWinnerHistoryByYear(parseInt(year));
+        history = await this.dependencies.votingService.getWinnerHistoryByYear(
+          parseInt(year),
+          winnerType || undefined
+        );
       } else {
         history = await this.dependencies.votingService.getWinnerHistory();
       }
@@ -434,9 +542,7 @@ export class VotingController {
 
       let yearlyWinners;
       if (year) {
-        const winner = await this.dependencies.votingService.getYearlyWinnerByYear(
-          parseInt(year)
-        );
+        const winner = await this.dependencies.votingService.getYearlyWinnerByYear(parseInt(year));
         yearlyWinners = winner ? [winner] : [];
       } else {
         yearlyWinners = await this.dependencies.votingService.getYearlyWinners();
@@ -644,13 +750,21 @@ const getVotingResultsFunction = async (
   return controller.getVotingResults(request, context);
 };
 
-const updateVotingPeriodFunction = async (
+const votingPeriodByIdFunction = async (
   request: HttpRequest,
   context: InvocationContext
 ): Promise<HttpResponseInit> => {
   const dependencies = await getDependencies();
   const controller = new VotingController(dependencies);
-  return controller.updateVotingPeriod(request, context);
+
+  switch (request.method) {
+    case 'GET':
+      return controller.getVotingPeriodById(request, context);
+    case 'PUT':
+      return controller.updateVotingPeriod(request, context);
+    default:
+      return ResponseHelper.methodNotAllowed();
+  }
 };
 
 const closeVotingPeriodFunction = async (
@@ -662,6 +776,15 @@ const closeVotingPeriodFunction = async (
   return controller.closeVotingPeriod(request, context);
 };
 
+const resetVotingPeriodFunction = async (
+  request: HttpRequest,
+  context: InvocationContext
+): Promise<HttpResponseInit> => {
+  const dependencies = await getDependencies();
+  const controller = new VotingController(dependencies);
+  return controller.resetVotingPeriod(request, context);
+};
+
 const getWinnersFunction = async (
   request: HttpRequest,
   context: InvocationContext
@@ -669,6 +792,15 @@ const getWinnersFunction = async (
   const dependencies = await getDependencies();
   const controller = new VotingController(dependencies);
   return controller.getWinners(request, context);
+};
+
+const getCurrentWinnerFunction = async (
+  request: HttpRequest,
+  context: InvocationContext
+): Promise<HttpResponseInit> => {
+  const dependencies = await getDependencies();
+  const controller = new VotingController(dependencies);
+  return controller.getCurrentWinner(request, context);
 };
 
 const getWinnersGroupedFunction = async (
@@ -788,11 +920,11 @@ app.http('get-voting-results', {
   handler: getVotingResultsFunction,
 });
 
-app.http('update-voting-period', {
-  methods: ['PUT', 'OPTIONS'],
+app.http('voting-period-by-id', {
+  methods: ['GET', 'PUT', 'OPTIONS'],
   authLevel: 'anonymous',
   route: 'voting/{votingPeriodId}',
-  handler: updateVotingPeriodFunction,
+  handler: votingPeriodByIdFunction,
 });
 
 app.http('close-voting-period', {
@@ -802,11 +934,25 @@ app.http('close-voting-period', {
   handler: closeVotingPeriodFunction,
 });
 
+app.http('reset-voting-period-data', {
+  methods: ['POST', 'OPTIONS'],
+  authLevel: 'anonymous',
+  route: 'voting/{votingPeriodId}/reset',
+  handler: resetVotingPeriodFunction,
+});
+
 app.http('get-winners', {
   methods: ['GET', 'OPTIONS'],
   authLevel: 'anonymous',
   route: 'voting/winners',
   handler: getWinnersFunction,
+});
+
+app.http('get-current-winner', {
+  methods: ['GET', 'OPTIONS'],
+  authLevel: 'anonymous',
+  route: 'voting/winners/current',
+  handler: getCurrentWinnerFunction,
 });
 
 app.http('get-winners-grouped', {

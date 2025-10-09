@@ -23,7 +23,6 @@ export class VotingService {
   private nominationRepository: NominationRepository;
   private votingPeriodRepository: VotingPeriodRepository;
   private winnerHistoryRepository: WinnerHistoryRepository;
-  private azureEmployeeService: AzureEmployeeService;
   private validationService: ValidationService;
   private notificationService: NotificationService;
   private employeeService: EmployeeService;
@@ -44,7 +43,6 @@ export class VotingService {
     this.nominationRepository = nominationRepository;
     this.votingPeriodRepository = votingPeriodRepository;
     this.winnerHistoryRepository = winnerHistoryRepository;
-    this.azureEmployeeService = azureEmployeeService;
     this.validationService = validationService;
     this.notificationService = notificationService;
     this.employeeService = employeeService;
@@ -133,6 +131,10 @@ export class VotingService {
 
   async getAllVotingPeriods(): Promise<VotingPeriod[]> {
     return await this.votingPeriodRepository.findRecentPeriods();
+  }
+
+  async getVotingPeriodById(votingPeriodId: string): Promise<VotingPeriod | null> {
+    return await this.votingPeriodRepository.findById(votingPeriodId);
   }
 
   async getVotingResults(votingPeriodId: string): Promise<VotingPeriodResults> {
@@ -418,9 +420,13 @@ export class VotingService {
     const recentPeriods = await this.votingPeriodRepository.findRecentPeriods();
     const winnersContainers: WinnersContainer[] = [];
 
-    // Process periods in parallel
+    // Process periods in parallel - Include both ACTIVE and CLOSED periods
     const containerPromises = recentPeriods
-      .filter(period => period.status === VotingPeriodStatus.ACTIVE)
+      .filter(
+        period =>
+          period.status === VotingPeriodStatus.ACTIVE ||
+          period.status === VotingPeriodStatus.PENDING
+      )
       .map(async period => {
         const results = await this.getVotingResults(period.id);
 
@@ -547,6 +553,59 @@ export class VotingService {
     return this.votingPeriodRepository.update(votingPeriodId, period);
   }
 
+  async resetVotingPeriod(votingPeriodId: string): Promise<{
+    success: boolean;
+    nominationsDeleted: number;
+    winnersDeleted: number;
+    message: string;
+  }> {
+    const result = {
+      success: false,
+      nominationsDeleted: 0,
+      winnersDeleted: 0,
+      message: '',
+    };
+
+    try {
+      // 1. Verify voting period exists
+      const period = await this.votingPeriodRepository.findById(votingPeriodId);
+      if (!period) {
+        throw new Error('Voting period not found');
+      }
+
+      // 2. Get all nominations for this period
+      const nominations = await this.nominationRepository.findByVotingPeriod(votingPeriodId);
+
+      // 3. Delete all nominations
+      for (const nomination of nominations) {
+        await this.nominationRepository.delete(nomination.id);
+        result.nominationsDeleted++;
+      }
+
+      // 4. Get all winners for this period
+      const winners = await this.winnerHistoryRepository.findByVotingPeriod(votingPeriodId);
+
+      // 5. Delete all winners
+      await this.winnerHistoryRepository.deleteByVotingPeriod(votingPeriodId);
+      result.winnersDeleted = winners.length;
+
+      // 6. Set period status back to ACTIVE (optional, or keep as is)
+      period.status = VotingPeriodStatus.ACTIVE;
+      await this.votingPeriodRepository.update(votingPeriodId, period);
+
+      // 7. Invalidate cache
+      this.cacheService.delete(`voting-results:${votingPeriodId}`);
+
+      result.success = true;
+      result.message = `Successfully reset voting period ${votingPeriodId}. Deleted ${result.nominationsDeleted} nominations and ${result.winnersDeleted} winners.`;
+
+      return result;
+    } catch (error) {
+      result.message = error instanceof Error ? error.message : 'Unknown error occurred';
+      return result;
+    }
+  }
+
   async selectRandomWinnerFromAll(votingPeriodId: string): Promise<VoteResult> {
     // Get voting results for the period
     const results = await this.getVotingResults(votingPeriodId);
@@ -632,12 +691,80 @@ export class VotingService {
     return await this.winnerHistoryRepository.findAll();
   }
 
-  async getWinnerHistoryByYear(year: number): Promise<WinnerHistory[]> {
-    return await this.winnerHistoryRepository.findByYear(year);
+  async getWinnerHistoryByYear(year: number, winnerType?: string): Promise<WinnerHistory[]> {
+    const allWinners = await this.winnerHistoryRepository.findByYear(year);
+
+    if (!winnerType || winnerType === 'all') {
+      return allWinners;
+    }
+
+    return allWinners.filter(w => w.winnerType === winnerType);
   }
 
-  async getWinnerHistoryByYearAndMonth(year: number, month: number): Promise<WinnerHistory[]> {
-    return await this.winnerHistoryRepository.findByYearAndMonth(year, month);
+  async getWinnerHistoryByYearAndMonth(
+    year: number,
+    month: number,
+    winnerType?: string
+  ): Promise<WinnerHistory[]> {
+    const allWinners = await this.winnerHistoryRepository.findByYearAndMonth(year, month);
+
+    if (!winnerType || winnerType === 'all') {
+      return allWinners;
+    }
+
+    return allWinners.filter(w => w.winnerType === winnerType);
+  }
+
+  async getWinnerByTypeAndPeriod(
+    votingPeriodId: string,
+    winnerType: 'general' | 'by_group'
+  ): Promise<WinnerHistory | WinnerHistory[]> {
+    if (winnerType === 'general') {
+      // Return only the general winner
+      const winner = await this.winnerHistoryRepository.findGeneralWinnerByPeriod(votingPeriodId);
+      if (!winner) {
+        throw new Error('No general winner found for this voting period');
+      }
+      return winner;
+    } else {
+      // Return all group winners
+      const winners = await this.winnerHistoryRepository.findGroupWinnersByPeriod(votingPeriodId);
+      if (!winners || winners.length === 0) {
+        throw new Error('No group winners found for this voting period');
+      }
+      return winners;
+    }
+  }
+
+  async getCurrentWinner(): Promise<WinnerHistory | null> {
+    // 1. Get all recent voting periods (sorted by most recent first)
+    const recentPeriods = await this.votingPeriodRepository.findRecentPeriods();
+
+    if (recentPeriods.length === 0) {
+      return null;
+    }
+
+    // 2. Find the most recent CLOSED period
+    let closedPeriod: VotingPeriod | null = null;
+
+    for (const period of recentPeriods) {
+      if (period.status === VotingPeriodStatus.CLOSED) {
+        closedPeriod = period;
+        break; // Take the first closed period (most recent)
+      }
+    }
+
+    // If no closed period found, return null
+    if (!closedPeriod) {
+      return null;
+    }
+
+    // 3. Get the general winner for this period
+    const generalWinner = await this.winnerHistoryRepository.findGeneralWinnerByPeriod(
+      closedPeriod.id
+    );
+
+    return generalWinner;
   }
 
   async getYearlyWinners(): Promise<WinnerHistory[]> {
