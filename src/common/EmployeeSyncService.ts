@@ -392,25 +392,45 @@ export class EmployeeSyncService {
 
       const { EligibilityHelper } = await import('./utils/EligibilityHelper.js');
 
-      // Update each employee's voting eligibility
-      for (const employee of employees) {
-        try {
-          const isEligible = EligibilityHelper.isVotingEligible(employee, config);
+      // Process employees in batches of 50 in parallel
+      const BATCH_SIZE = 50;
+      const batches: Employee[][] = [];
 
-          // Only update if eligibility changed
-          if (employee.votingEligible !== isEligible) {
-            const updatedEmployee = {
-              ...employee,
-              votingEligible: isEligible,
-              updatedAt: new Date(),
-            };
+      for (let i = 0; i < employees.length; i += BATCH_SIZE) {
+        batches.push(employees.slice(i, i + BATCH_SIZE));
+      }
 
-            await this.employeeRepository.update(employee.id, updatedEmployee);
-            result.totalUpdated++;
+      for (const batch of batches) {
+        const updatePromises = batch.map(async employee => {
+          try {
+            const isEligible = EligibilityHelper.isVotingEligible(employee, config);
+
+            // Only update if eligibility changed
+            if (employee.votingEligible !== isEligible) {
+              const updatedEmployee = {
+                ...employee,
+                votingEligible: isEligible,
+                updatedAt: new Date(),
+              };
+
+              await this.employeeRepository.update(employee.id, updatedEmployee);
+              return { success: true, updated: true };
+            }
+            return { success: true, updated: false };
+          } catch (error) {
+            const errorMessage = `Error updating employee ${employee.id}: ${error instanceof Error ? error.message : String(error)}`;
+            return { success: false, error: errorMessage, updated: false };
           }
-        } catch (error) {
-          const errorMessage = `Error updating employee ${employee.id}: ${error instanceof Error ? error.message : String(error)}`;
-          result.errors.push(errorMessage);
+        });
+
+        const batchResults = await Promise.all(updatePromises);
+
+        for (const batchResult of batchResults) {
+          if (batchResult.success && batchResult.updated) {
+            result.totalUpdated++;
+          } else if (!batchResult.success && 'error' in batchResult && batchResult.error) {
+            result.errors.push(batchResult.error);
+          }
         }
       }
 
