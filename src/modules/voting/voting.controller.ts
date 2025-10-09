@@ -965,22 +965,21 @@ const getYearlyWinnersFunction = async (
   return controller.getYearlyWinners(request, context);
 };
 
-const markYearlyWinnerFunction = async (
+const yearlyWinnerFunction = async (
   request: HttpRequest,
   context: InvocationContext
 ): Promise<HttpResponseInit> => {
   const dependencies = await getDependencies();
   const controller = new VotingController(dependencies);
-  return controller.markYearlyWinner(request, context);
-};
 
-const unmarkYearlyWinnerFunction = async (
-  request: HttpRequest,
-  context: InvocationContext
-): Promise<HttpResponseInit> => {
-  const dependencies = await getDependencies();
-  const controller = new VotingController(dependencies);
-  return controller.unmarkYearlyWinner(request, context);
+  switch (request.method) {
+    case 'POST':
+      return controller.markYearlyWinner(request, context);
+    case 'DELETE':
+      return controller.unmarkYearlyWinner(request, context);
+    default:
+      return ResponseHelper.methodNotAllowed();
+  }
 };
 
 const getEmployeeResultsFunction = async (
@@ -1001,13 +1000,21 @@ const createBulkNominationsForTestingFunction = async (
   return controller.createBulkNominationsForTesting(request, context);
 };
 
-const addWinnerReactionFunction = async (
+const winnerReactionsFunction = async (
   request: HttpRequest,
   context: InvocationContext
 ): Promise<HttpResponseInit> => {
   const dependencies = await getDependencies();
   const controller = new VotingController(dependencies);
-  return controller.addWinnerReaction(request, context);
+
+  switch (request.method) {
+    case 'GET':
+      return controller.getWinnerReactions(request, context);
+    case 'POST':
+      return controller.addWinnerReaction(request, context);
+    default:
+      return ResponseHelper.methodNotAllowed();
+  }
 };
 
 const removeWinnerReactionFunction = async (
@@ -1017,15 +1024,6 @@ const removeWinnerReactionFunction = async (
   const dependencies = await getDependencies();
   const controller = new VotingController(dependencies);
   return controller.removeWinnerReaction(request, context);
-};
-
-const getWinnerReactionsFunction = async (
-  request: HttpRequest,
-  context: InvocationContext
-): Promise<HttpResponseInit> => {
-  const dependencies = await getDependencies();
-  const controller = new VotingController(dependencies);
-  return controller.getWinnerReactions(request, context);
 };
 
 // Register Azure Functions
@@ -1134,18 +1132,11 @@ app.http('get-yearly-winners', {
   handler: getYearlyWinnersFunction,
 });
 
-app.http('mark-yearly-winner', {
-  methods: ['POST', 'OPTIONS'],
+app.http('yearly-winner', {
+  methods: ['POST', 'DELETE', 'OPTIONS'],
   authLevel: 'anonymous',
   route: 'voting/winners/{winnerId}/yearly',
-  handler: markYearlyWinnerFunction,
-});
-
-app.http('unmark-yearly-winner', {
-  methods: ['DELETE', 'OPTIONS'],
-  authLevel: 'anonymous',
-  route: 'voting/winners/{winnerId}/yearly',
-  handler: unmarkYearlyWinnerFunction,
+  handler: yearlyWinnerFunction,
 });
 
 app.http('get-employee-results', {
@@ -1162,11 +1153,11 @@ app.http('create-bulk-nominations-testing', {
   handler: createBulkNominationsForTestingFunction,
 });
 
-app.http('add-winner-reaction', {
-  methods: ['POST', 'OPTIONS'],
+app.http('winner-reactions', {
+  methods: ['GET', 'POST', 'OPTIONS'],
   authLevel: 'anonymous',
   route: 'voting/winners/{winnerId}/reactions',
-  handler: addWinnerReactionFunction,
+  handler: winnerReactionsFunction,
 });
 
 app.http('remove-winner-reaction', {
@@ -1174,11 +1165,4 @@ app.http('remove-winner-reaction', {
   authLevel: 'anonymous',
   route: 'voting/winners/{winnerId}/reactions/{emoji}',
   handler: removeWinnerReactionFunction,
-});
-
-app.http('get-winner-reactions', {
-  methods: ['GET', 'OPTIONS'],
-  authLevel: 'anonymous',
-  route: 'voting/winners/{winnerId}/reactions',
-  handler: getWinnerReactionsFunction,
 });
