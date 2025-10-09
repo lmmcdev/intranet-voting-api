@@ -2,6 +2,7 @@ import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/fu
 import { CreateNominationDto } from './dto/create-nomination.dto';
 import { UpdateNominationDto } from './dto/update-nomination.dto';
 import { UpdateVotingPeriodDto } from './dto/update-voting-period.dto';
+import { AddReactionDto } from './dto/add-reaction.dto';
 import { ResponseHelper } from '../../common/utils/ResponseHelper';
 import { getDependencies } from '../../common/utils/Dependencies';
 import { AuthHelper } from '../../common/utils/AuthHelper';
@@ -689,6 +690,122 @@ export class VotingController {
       return ResponseHelper.internalServerError();
     }
   }
+
+  async addWinnerReaction(
+    request: HttpRequest,
+    context: InvocationContext
+  ): Promise<HttpResponseInit> {
+    try {
+      if (request.method !== 'POST') {
+        return ResponseHelper.methodNotAllowed();
+      }
+
+      const authResult = await AuthHelper.requireAuth(request, context);
+      if (!authResult.success) {
+        return authResult.response;
+      }
+      const user = authResult.user;
+
+      const winnerId = request.params.winnerId;
+      if (!winnerId) {
+        return ResponseHelper.badRequest('Winner ID is required');
+      }
+
+      const body = (await request.json()) as AddReactionDto;
+      if (!body.emoji) {
+        return ResponseHelper.badRequest('Emoji is required');
+      }
+
+      const winner = await this.dependencies.votingService.addReactionToWinner(
+        winnerId,
+        user.userId,
+        user.username,
+        body.emoji
+      );
+
+      context.log(`User ${user.email} added reaction ${body.emoji} to winner ${winnerId}`);
+      return ResponseHelper.ok(winner);
+    } catch (error) {
+      context.error('Error adding reaction to winner:', error);
+      if (error instanceof Error) {
+        return ResponseHelper.badRequest(error.message);
+      }
+      return ResponseHelper.internalServerError();
+    }
+  }
+
+  async removeWinnerReaction(
+    request: HttpRequest,
+    context: InvocationContext
+  ): Promise<HttpResponseInit> {
+    try {
+      if (request.method !== 'DELETE') {
+        return ResponseHelper.methodNotAllowed();
+      }
+
+      const authResult = await AuthHelper.requireAuth(request, context);
+      if (!authResult.success) {
+        return authResult.response;
+      }
+      const user = authResult.user;
+
+      const winnerId = request.params.winnerId;
+      const emoji = request.params.emoji;
+
+      if (!winnerId) {
+        return ResponseHelper.badRequest('Winner ID is required');
+      }
+
+      if (!emoji) {
+        return ResponseHelper.badRequest('Emoji is required');
+      }
+
+      const winner = await this.dependencies.votingService.removeReactionFromWinner(
+        winnerId,
+        user.userId,
+        decodeURIComponent(emoji)
+      );
+
+      context.log(`User ${user.email} removed reaction ${emoji} from winner ${winnerId}`);
+      return ResponseHelper.ok(winner);
+    } catch (error) {
+      context.error('Error removing reaction from winner:', error);
+      if (error instanceof Error) {
+        return ResponseHelper.badRequest(error.message);
+      }
+      return ResponseHelper.internalServerError();
+    }
+  }
+
+  async getWinnerReactions(
+    request: HttpRequest,
+    context: InvocationContext
+  ): Promise<HttpResponseInit> {
+    try {
+      if (request.method !== 'GET') {
+        return ResponseHelper.methodNotAllowed();
+      }
+
+      const authResult = await AuthHelper.requireAuth(request, context);
+      if (!authResult.success) {
+        return authResult.response;
+      }
+
+      const winnerId = request.params.winnerId;
+      if (!winnerId) {
+        return ResponseHelper.badRequest('Winner ID is required');
+      }
+
+      const reactions = await this.dependencies.votingService.getWinnerReactions(winnerId);
+      return ResponseHelper.ok(reactions);
+    } catch (error) {
+      context.error('Error getting winner reactions:', error);
+      if (error instanceof Error) {
+        return ResponseHelper.badRequest(error.message);
+      }
+      return ResponseHelper.internalServerError();
+    }
+  }
 }
 
 // Azure Functions endpoints
@@ -884,6 +1001,33 @@ const createBulkNominationsForTestingFunction = async (
   return controller.createBulkNominationsForTesting(request, context);
 };
 
+const addWinnerReactionFunction = async (
+  request: HttpRequest,
+  context: InvocationContext
+): Promise<HttpResponseInit> => {
+  const dependencies = await getDependencies();
+  const controller = new VotingController(dependencies);
+  return controller.addWinnerReaction(request, context);
+};
+
+const removeWinnerReactionFunction = async (
+  request: HttpRequest,
+  context: InvocationContext
+): Promise<HttpResponseInit> => {
+  const dependencies = await getDependencies();
+  const controller = new VotingController(dependencies);
+  return controller.removeWinnerReaction(request, context);
+};
+
+const getWinnerReactionsFunction = async (
+  request: HttpRequest,
+  context: InvocationContext
+): Promise<HttpResponseInit> => {
+  const dependencies = await getDependencies();
+  const controller = new VotingController(dependencies);
+  return controller.getWinnerReactions(request, context);
+};
+
 // Register Azure Functions
 app.http('create-nomination', {
   methods: ['POST', 'OPTIONS'],
@@ -1016,4 +1160,25 @@ app.http('create-bulk-nominations-testing', {
   authLevel: 'anonymous',
   route: 'voting/testing/bulk-nominations',
   handler: createBulkNominationsForTestingFunction,
+});
+
+app.http('add-winner-reaction', {
+  methods: ['POST', 'OPTIONS'],
+  authLevel: 'anonymous',
+  route: 'voting/winners/{winnerId}/reactions',
+  handler: addWinnerReactionFunction,
+});
+
+app.http('remove-winner-reaction', {
+  methods: ['DELETE', 'OPTIONS'],
+  authLevel: 'anonymous',
+  route: 'voting/winners/{winnerId}/reactions/{emoji}',
+  handler: removeWinnerReactionFunction,
+});
+
+app.http('get-winner-reactions', {
+  methods: ['GET', 'OPTIONS'],
+  authLevel: 'anonymous',
+  route: 'voting/winners/{winnerId}/reactions',
+  handler: getWinnerReactionsFunction,
 });

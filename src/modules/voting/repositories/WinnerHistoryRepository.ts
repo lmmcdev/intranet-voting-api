@@ -1,5 +1,5 @@
 import { CosmosClient } from '../../../common/utils/CosmosClient';
-import { WinnerHistory, WinnerType } from '../../../common/models/WinnerHistory';
+import { WinnerHistory, WinnerType, Reaction } from '../../../common/models/WinnerHistory';
 
 export class WinnerHistoryRepository {
   private readonly containerName = 'winnerHistory';
@@ -173,5 +173,60 @@ export class WinnerHistoryRepository {
     const updatedWinner = { ...winner, isYearlyWinner: false };
     const { resource } = await container.item(winnerId, winnerId).replace<WinnerHistory>(updatedWinner);
     return resource as WinnerHistory;
+  }
+
+  async addReaction(winnerId: string, reaction: Reaction): Promise<WinnerHistory> {
+    const container = await this.cosmosClient.getContainer(this.containerName);
+    const { resource: winner } = await container.item(winnerId, winnerId).read<WinnerHistory>();
+
+    if (!winner) {
+      throw new Error('Winner not found');
+    }
+
+    const reactions = winner.reactions || [];
+
+    // Check if user already reacted with this emoji
+    const existingReactionIndex = reactions.findIndex(
+      (r) => r.userId === reaction.userId && r.emoji === reaction.emoji
+    );
+
+    if (existingReactionIndex !== -1) {
+      // User already reacted with this emoji, don't add duplicate
+      return winner;
+    }
+
+    reactions.push(reaction);
+    const updatedWinner = { ...winner, reactions };
+    const { resource } = await container.item(winnerId, winnerId).replace<WinnerHistory>(updatedWinner);
+    return resource as WinnerHistory;
+  }
+
+  async removeReaction(winnerId: string, userId: string, emoji: string): Promise<WinnerHistory> {
+    const container = await this.cosmosClient.getContainer(this.containerName);
+    const { resource: winner } = await container.item(winnerId, winnerId).read<WinnerHistory>();
+
+    if (!winner) {
+      throw new Error('Winner not found');
+    }
+
+    const reactions = winner.reactions || [];
+    const updatedReactions = reactions.filter(
+      (r) => !(r.userId === userId && r.emoji === emoji)
+    );
+
+    const updatedWinner = { ...winner, reactions: updatedReactions };
+    const { resource } = await container.item(winnerId, winnerId).replace<WinnerHistory>(updatedWinner);
+    return resource as WinnerHistory;
+  }
+
+  async getReactions(winnerId: string): Promise<Reaction[]> {
+    const container = await this.cosmosClient.getContainer(this.containerName);
+    const { resource: winner } = await container.item(winnerId, winnerId).read<WinnerHistory>();
+
+    if (!winner) {
+      throw new Error('Winner not found');
+    }
+
+    return winner.reactions || [];
   }
 }

@@ -5,6 +5,13 @@ export enum WinnerType {
   BY_GROUP = 'by_group', // Ganador por grupo/departamento
 }
 
+export interface Reaction {
+  userId: string;
+  userName: string;
+  emoji: string;
+  timestamp: Date;
+}
+
 export interface WinnerHistory {
   id: string;
   votingPeriodId: string;
@@ -21,5 +28,6 @@ export interface WinnerHistory {
   votingGroup?: string;
   winnerType: WinnerType; // Tipo de ganador
   isYearlyWinner?: boolean; // Marca si es el ganador del año
+  reactions?: Reaction[]; // Reacciones de los usuarios al ganador
   createdAt: Date;
 }

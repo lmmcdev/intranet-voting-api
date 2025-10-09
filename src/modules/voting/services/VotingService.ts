@@ -8,7 +8,7 @@ import {
   VotingPeriodResults,
   WinnersContainer,
 } from '../../../common/models/VoteResult';
-import { WinnerHistory, WinnerType } from '../../../common/models/WinnerHistory';
+import { WinnerHistory, WinnerType, Reaction } from '../../../common/models/WinnerHistory';
 import { NominationRepository } from '../repositories/NominationRepository';
 import { VotingPeriodRepository } from '../repositories/VotingPeriodRepository';
 import { WinnerHistoryRepository } from '../repositories/WinnerHistoryRepository';
@@ -930,5 +930,34 @@ export class VotingService {
       result.errors.push(error instanceof Error ? error.message : 'Unknown error occurred');
       return result;
     }
+  }
+
+  // Reaction methods
+  async addReactionToWinner(
+    winnerId: string,
+    userId: string,
+    userName: string,
+    emoji: string
+  ): Promise<WinnerHistory> {
+    const reaction: Reaction = {
+      userId,
+      userName,
+      emoji,
+      timestamp: new Date(),
+    };
+
+    return await this.winnerHistoryRepository.addReaction(winnerId, reaction);
+  }
+
+  async removeReactionFromWinner(
+    winnerId: string,
+    userId: string,
+    emoji: string
+  ): Promise<WinnerHistory> {
+    return await this.winnerHistoryRepository.removeReaction(winnerId, userId, emoji);
+  }
+
+  async getWinnerReactions(winnerId: string): Promise<Reaction[]> {
+    return await this.winnerHistoryRepository.getReactions(winnerId);
   }
 }
