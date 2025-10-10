@@ -2,6 +2,7 @@ import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/fu
 import { CreateNominationDto } from './dto/create-nomination.dto';
 import { UpdateNominationDto } from './dto/update-nomination.dto';
 import { UpdateVotingPeriodDto } from './dto/update-voting-period.dto';
+import { CreateVotingPeriodDto } from './dto/create-voting-period.dto';
 import { AddReactionDto } from './dto/add-reaction.dto';
 import { ResponseHelper } from '../../common/utils/ResponseHelper';
 import { getDependencies } from '../../common/utils/Dependencies';
@@ -143,6 +144,59 @@ export class VotingController {
       return ResponseHelper.ok(nomination);
     } catch (error) {
       context.error('Error getting nomination:', error);
+      return ResponseHelper.internalServerError();
+    }
+  }
+
+  async createVotingPeriod(
+    request: HttpRequest,
+    context: InvocationContext
+  ): Promise<HttpResponseInit> {
+    try {
+      if (request.method !== 'POST') {
+        return ResponseHelper.methodNotAllowed();
+      }
+
+      const authResult = await AuthHelper.requireAuth(request, context);
+      if (!authResult.success) {
+        return authResult.response;
+      }
+
+      // Only admins can create voting periods
+      const user = authResult.user;
+      if (!user.roles?.includes('admin')) {
+        return ResponseHelper.forbidden('Admin access required');
+      }
+
+      const body = (await request.json()) as CreateVotingPeriodDto;
+
+      // Validate required fields
+      if (!body.year || !body.month || !body.startDate || !body.endDate) {
+        return ResponseHelper.badRequest(
+          'Missing required fields: year, month, startDate, endDate'
+        );
+      }
+
+      // Convert date strings to Date objects
+      const data = {
+        ...body,
+        startDate: new Date(body.startDate),
+        endDate: new Date(body.endDate),
+      };
+
+      const newPeriod = await this.dependencies.votingService.createVotingPeriod(data, {
+        userId: user.userId,
+        userName: user.username || user.email || 'unknown',
+        userEmail: user.email || undefined,
+      });
+
+      context.log(`User ${user.email} created voting period ${newPeriod.id}`);
+      return ResponseHelper.created(newPeriod);
+    } catch (error) {
+      context.error('Error creating voting period:', error);
+      if (error instanceof Error) {
+        return ResponseHelper.badRequest(error.message);
+      }
       return ResponseHelper.internalServerError();
     }
   }
@@ -289,6 +343,48 @@ export class VotingController {
     }
   }
 
+  async deleteVotingPeriod(
+    request: HttpRequest,
+    context: InvocationContext
+  ): Promise<HttpResponseInit> {
+    try {
+      if (request.method !== 'DELETE') {
+        return ResponseHelper.methodNotAllowed();
+      }
+
+      const authResult = await AuthHelper.requireAuth(request, context);
+      if (!authResult.success) {
+        return authResult.response;
+      }
+
+      // Only admins can delete voting periods
+      const user = authResult.user;
+      if (!user.roles?.includes('admin')) {
+        return ResponseHelper.forbidden('Admin access required');
+      }
+
+      const votingPeriodId = request.params.votingPeriodId;
+      if (!votingPeriodId) {
+        return ResponseHelper.badRequest('Voting period ID is required');
+      }
+
+      const result = await this.dependencies.votingService.deleteVotingPeriod(votingPeriodId, {
+        userId: user.userId,
+        userName: user.username || user.email || 'unknown',
+        userEmail: user.email || undefined,
+      });
+
+      context.log(`Admin ${user.email} deleted voting period ${votingPeriodId}`);
+      return ResponseHelper.ok(result);
+    } catch (error) {
+      context.error('Error deleting voting period:', error);
+      if (error instanceof Error) {
+        return ResponseHelper.badRequest(error.message);
+      }
+      return ResponseHelper.internalServerError();
+    }
+  }
+
   async closeVotingPeriod(
     request: HttpRequest,
     context: InvocationContext
@@ -311,8 +407,8 @@ export class VotingController {
 
       const result = await this.dependencies.votingService.closeVotingPeriod(votingPeriodId, {
         userId: user.userId,
-        userName: user.username,
-        userEmail: user.email,
+        userName: user.username || user.email || 'unknown',
+        userEmail: user.email || undefined,
       });
 
       context.log(`User ${user.email} closed voting period ${votingPeriodId}`);
@@ -902,15 +998,6 @@ const getCurrentVotingFunction = async (
   return controller.getCurrentVoting(request, context);
 };
 
-const getAllVotingFunction = async (
-  request: HttpRequest,
-  context: InvocationContext
-): Promise<HttpResponseInit> => {
-  const dependencies = await getDependencies();
-  const controller = new VotingController(dependencies);
-  return controller.getAllVoting(request, context);
-};
-
 const getVotingResultsFunction = async (
   request: HttpRequest,
   context: InvocationContext
@@ -932,6 +1019,8 @@ const votingPeriodByIdFunction = async (
       return controller.getVotingPeriodById(request, context);
     case 'PUT':
       return controller.updateVotingPeriod(request, context);
+    case 'DELETE':
+      return controller.deleteVotingPeriod(request, context);
     default:
       return ResponseHelper.methodNotAllowed();
   }
@@ -1101,11 +1190,28 @@ app.http('get-current-voting', {
   handler: getCurrentVotingFunction,
 });
 
-app.http('get-all-voting', {
-  methods: ['GET', 'OPTIONS'],
+const votingPeriodsFunction = async (
+  request: HttpRequest,
+  context: InvocationContext
+): Promise<HttpResponseInit> => {
+  const dependencies = await getDependencies();
+  const controller = new VotingController(dependencies);
+
+  switch (request.method) {
+    case 'GET':
+      return controller.getAllVoting(request, context);
+    case 'POST':
+      return controller.createVotingPeriod(request, context);
+    default:
+      return ResponseHelper.methodNotAllowed();
+  }
+};
+
+app.http('voting-periods', {
+  methods: ['GET', 'POST', 'OPTIONS'],
   authLevel: 'anonymous',
-  route: 'voting',
-  handler: getAllVotingFunction,
+  route: 'voting-periods',
+  handler: votingPeriodsFunction,
 });
 
 app.http('get-voting-results', {
@@ -1116,7 +1222,7 @@ app.http('get-voting-results', {
 });
 
 app.http('voting-period-by-id', {
-  methods: ['GET', 'PUT', 'OPTIONS'],
+  methods: ['GET', 'PUT', 'DELETE', 'OPTIONS'],
   authLevel: 'anonymous',
   route: 'voting/{votingPeriodId}',
   handler: votingPeriodByIdFunction,
