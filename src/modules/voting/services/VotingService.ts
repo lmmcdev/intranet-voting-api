@@ -18,6 +18,8 @@ import { NotificationService } from './NotificationService';
 import { EmployeeService } from '../../employee/employee.service';
 import { ConfigurationService } from '../../configuration/configuration.service';
 import { CacheService } from '../../../common/services/CacheService';
+import { AuditService } from '../../../common/services/AuditService';
+import { AuditEntity, AuditAction } from '../../../common/models/AuditLog';
 
 export class VotingService {
   private nominationRepository: NominationRepository;
@@ -28,6 +30,7 @@ export class VotingService {
   private employeeService: EmployeeService;
   private configurationService?: ConfigurationService;
   private cacheService: CacheService;
+  private auditService?: AuditService;
 
   constructor(
     nominationRepository: NominationRepository,
@@ -38,7 +41,8 @@ export class VotingService {
     notificationService: NotificationService,
     employeeService: EmployeeService,
     configurationService?: ConfigurationService,
-    cacheService?: CacheService
+    cacheService?: CacheService,
+    auditService?: AuditService
   ) {
     this.nominationRepository = nominationRepository;
     this.votingPeriodRepository = votingPeriodRepository;
@@ -48,6 +52,7 @@ export class VotingService {
     this.employeeService = employeeService;
     this.configurationService = configurationService;
     this.cacheService = cacheService || new CacheService(5 * 60 * 1000); // 5 minutes default
+    this.auditService = auditService;
   }
 
   async createNomination(nominationData: CreateNominationDto): Promise<Nomination> {
@@ -499,7 +504,8 @@ export class VotingService {
 
   async updateVotingPeriod(
     votingPeriodId: string,
-    updateData: UpdateVotingPeriodDto
+    updateData: UpdateVotingPeriodDto,
+    userContext?: { userId: string; userName: string; userEmail?: string }
   ): Promise<VotingPeriod> {
     const period = await this.votingPeriodRepository.findById(votingPeriodId);
     if (!period) {
@@ -534,10 +540,38 @@ export class VotingService {
       ...(updateData.description !== undefined && { description: updateData.description }),
     };
 
-    return this.votingPeriodRepository.update(votingPeriodId, updatedPeriod);
+    const result = await this.votingPeriodRepository.update(votingPeriodId, updatedPeriod);
+
+    // Log audit
+    if (this.auditService && userContext) {
+      try {
+        const changes = this.auditService.detectChanges(period, updatedPeriod);
+        await this.auditService.log({
+          entityType: AuditEntity.VOTING_PERIOD,
+          entityId: votingPeriodId,
+          action: AuditAction.UPDATE,
+          userId: userContext.userId,
+          userName: userContext.userName,
+          userEmail: userContext.userEmail,
+          changes,
+          metadata: {
+            year: updatedPeriod.year,
+            month: updatedPeriod.month,
+            status: updatedPeriod.status,
+          },
+        });
+      } catch (error) {
+        console.error('Failed to log audit:', error);
+      }
+    }
+
+    return result;
   }
 
-  async closeVotingPeriod(votingPeriodId: string): Promise<VotingPeriod> {
+  async closeVotingPeriod(
+    votingPeriodId: string,
+    userContext?: { userId: string; userName: string; userEmail?: string }
+  ): Promise<VotingPeriod> {
     const period = await this.votingPeriodRepository.findById(votingPeriodId);
     if (!period) {
       throw new Error('Voting period not found');
@@ -547,13 +581,47 @@ export class VotingService {
       throw new Error('Voting period is already closed');
     }
 
+    const oldStatus = period.status;
     period.status = VotingPeriodStatus.CLOSED;
     period.endDate = new Date();
 
-    return this.votingPeriodRepository.update(votingPeriodId, period);
+    const result = await this.votingPeriodRepository.update(votingPeriodId, period);
+
+    // Log audit
+    if (this.auditService && userContext) {
+      try {
+        await this.auditService.log({
+          entityType: AuditEntity.VOTING_PERIOD,
+          entityId: votingPeriodId,
+          action: AuditAction.CLOSE,
+          userId: userContext.userId,
+          userName: userContext.userName,
+          userEmail: userContext.userEmail,
+          changes: [
+            {
+              field: 'status',
+              oldValue: oldStatus,
+              newValue: VotingPeriodStatus.CLOSED,
+            },
+          ],
+          metadata: {
+            year: period.year,
+            month: period.month,
+            closedAt: period.endDate,
+          },
+        });
+      } catch (error) {
+        console.error('Failed to log audit:', error);
+      }
+    }
+
+    return result;
   }
 
-  async resetVotingPeriod(votingPeriodId: string): Promise<{
+  async resetVotingPeriod(
+    votingPeriodId: string,
+    userContext?: { userId: string; userName: string; userEmail?: string }
+  ): Promise<{
     success: boolean;
     nominationsDeleted: number;
     winnersDeleted: number;
@@ -598,6 +666,28 @@ export class VotingService {
 
       result.success = true;
       result.message = `Successfully reset voting period ${votingPeriodId}. Deleted ${result.nominationsDeleted} nominations and ${result.winnersDeleted} winners.`;
+
+      // 8. Log audit
+      if (this.auditService && userContext) {
+        try {
+          await this.auditService.log({
+            entityType: AuditEntity.VOTING_PERIOD,
+            entityId: votingPeriodId,
+            action: AuditAction.RESET,
+            userId: userContext.userId,
+            userName: userContext.userName,
+            userEmail: userContext.userEmail,
+            metadata: {
+              year: period.year,
+              month: period.month,
+              nominationsDeleted: result.nominationsDeleted,
+              winnersDeleted: result.winnersDeleted,
+            },
+          });
+        } catch (error) {
+          console.error('Failed to log audit:', error);
+        }
+      }
 
       return result;
     } catch (error) {
@@ -959,5 +1049,13 @@ export class VotingService {
 
   async getWinnerReactions(winnerId: string): Promise<Reaction[]> {
     return await this.winnerHistoryRepository.getReactions(winnerId);
+  }
+
+  async getVotingPeriodAuditHistory(votingPeriodId: string) {
+    if (!this.auditService) {
+      return [];
+    }
+
+    return await this.auditService.getEntityAuditLogs(AuditEntity.VOTING_PERIOD, votingPeriodId);
   }
 }

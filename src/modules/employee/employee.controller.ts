@@ -270,6 +270,7 @@ export class EmployeeController {
         return authResult.response;
       }
 
+      const user = authResult.user;
       const id = request.params.id;
       if (!id) {
         return ResponseHelper.badRequest('Employee ID is required');
@@ -285,12 +286,17 @@ export class EmployeeController {
         }
       }
 
-      const updatedEmployee = await this.employeeService.updateEmployee(id, body);
+      const updatedEmployee = await this.employeeService.updateEmployee(id, body, {
+        userId: user.userId,
+        userName: user.username || user.email || 'unknown',
+        userEmail: user.email || undefined,
+      });
 
       if (!updatedEmployee) {
         return ResponseHelper.notFound('Employee not found');
       }
 
+      context.log(`User ${user.email} updated employee ${id}`);
       return ResponseHelper.ok(updatedEmployee);
     } catch (error) {
       context.error('Error updating employee:', error);

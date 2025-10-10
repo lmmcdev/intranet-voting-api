@@ -10,17 +10,22 @@ import {
 } from './dto/bulk-update-employee.dto';
 import { NameHelper } from '../../common/utils/NameHelper';
 import { CacheService } from '../../common/services/CacheService';
+import { AuditService } from '../../common/services/AuditService';
+import { AuditEntity, AuditAction } from '../../common/models/AuditLog';
 
 export class EmployeeService {
   private cacheService: CacheService;
+  private auditService?: AuditService;
 
   constructor(
     private readonly employeeRepository: EmployeeRepository,
     private readonly configurationService?: ConfigurationService,
     private readonly votingGroupService?: VotingGroupService,
-    cacheService?: CacheService
+    cacheService?: CacheService,
+    auditService?: AuditService
   ) {
     this.cacheService = cacheService || new CacheService(10 * 60 * 1000); // 10 minutes default for employees
+    this.auditService = auditService;
   }
 
   async getEmployees(
@@ -133,7 +138,14 @@ export class EmployeeService {
     return this.employeeRepository.getDistinctPositions();
   }
 
-  async updateEmployee(id: string, updates: Partial<Employee>): Promise<Employee | null> {
+  async updateEmployee(
+    id: string,
+    updates: Partial<Employee>,
+    userContext?: { userId: string; userName: string; userEmail?: string }
+  ): Promise<Employee | null> {
+    // Get current employee for audit comparison
+    const currentEmployee = await this.employeeRepository.findById(id);
+
     // Normalize name fields if they're being updated
     const normalizedUpdates = NameHelper.normalizeNameFields(updates);
     const updatedEmployee = await this.employeeRepository.partialUpdate(id, normalizedUpdates);
@@ -141,6 +153,30 @@ export class EmployeeService {
     // Invalidate cache for this employee
     if (updatedEmployee) {
       this.cacheService.delete(`employee:${id}`);
+    }
+
+    // Log audit
+    if (this.auditService && userContext && currentEmployee && updatedEmployee) {
+      try {
+        const changes = this.auditService.detectChanges(currentEmployee, updatedEmployee);
+        if (changes.length > 0) {
+          await this.auditService.log({
+            entityType: AuditEntity.EMPLOYEE,
+            entityId: id,
+            action: AuditAction.UPDATE,
+            userId: userContext.userId,
+            userName: userContext.userName,
+            userEmail: userContext.userEmail,
+            changes,
+            metadata: {
+              employeeName: updatedEmployee.fullName,
+              department: updatedEmployee.department,
+            },
+          });
+        }
+      } catch (error) {
+        console.error('Failed to log audit:', error);
+      }
     }
 
     return updatedEmployee;

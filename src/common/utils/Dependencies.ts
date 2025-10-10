@@ -5,6 +5,7 @@ import { VotingPeriodRepository } from '../../modules/voting/repositories/Voting
 import { WinnerHistoryRepository } from '../../modules/voting/repositories/WinnerHistoryRepository';
 import { EligibilityConfigRepository } from '../../modules/configuration/repositories/EligibilityConfigRepository';
 import { VotingGroupConfigRepository } from '../../modules/configuration/repositories/VotingGroupConfigRepository';
+import { AuditLogRepository } from '../repositories/AuditLogRepository';
 import { EmployeeDirectoryService } from '../../modules/employee/services/EmployeeDirectoryService';
 import { EmployeeService } from '../../modules/employee/employee.service';
 import { AzureEmployeeService } from '../AzureEmployeeService';
@@ -15,6 +16,7 @@ import { ValidationService } from '../../modules/voting/services/ValidationServi
 import { NotificationService } from '../../modules/voting/services/NotificationService';
 import { ConfigurationService } from '../../modules/configuration/configuration.service';
 import { AuthService } from '../../modules/auth/auth.service';
+import { AuditService } from '../services/AuditService';
 import {
   COSMOS_DB_ENDPOINT,
   COSMOS_DB_KEY,
@@ -30,6 +32,7 @@ interface Dependencies {
   winnerHistoryRepository: WinnerHistoryRepository;
   eligibilityConfigRepository: EligibilityConfigRepository;
   votingGroupConfigRepository: VotingGroupConfigRepository;
+  auditLogRepository: AuditLogRepository;
   employeeService: EmployeeService;
   azureEmployeeService: AzureEmployeeService;
   employeeSyncService: EmployeeSyncService;
@@ -40,6 +43,7 @@ interface Dependencies {
   votingGroupService: VotingGroupService;
   configurationService: ConfigurationService;
   authService: AuthService;
+  auditService: AuditService;
 }
 
 let dependencies: Dependencies | null = null;
@@ -66,13 +70,21 @@ export async function getDependencies(): Promise<Dependencies> {
     const winnerHistoryRepository = new WinnerHistoryRepository(cosmosClient);
     const eligibilityConfigRepository = new EligibilityConfigRepository(cosmosClient);
     const votingGroupConfigRepository = new VotingGroupConfigRepository(cosmosClient);
+    const auditLogRepository = new AuditLogRepository(cosmosClient);
 
     const configurationService = new ConfigurationService(
       eligibilityConfigRepository,
       votingGroupConfigRepository
     );
 
-    const employeeService = new EmployeeService(employeeRepository, configurationService);
+    const auditService = new AuditService(auditLogRepository);
+    const employeeService = new EmployeeService(
+      employeeRepository,
+      configurationService,
+      undefined,
+      undefined,
+      auditService
+    );
     const azureEmployeeService = new AzureEmployeeService();
 
     // Load configurations from database
@@ -101,7 +113,9 @@ export async function getDependencies(): Promise<Dependencies> {
       validationService,
       notificationService,
       employeeService,
-      configurationService
+      configurationService,
+      undefined,
+      auditService
     );
     const authService = new AuthService(employeeRepository);
 
@@ -113,6 +127,7 @@ export async function getDependencies(): Promise<Dependencies> {
       winnerHistoryRepository,
       eligibilityConfigRepository,
       votingGroupConfigRepository,
+      auditLogRepository,
       employeeService,
       azureEmployeeService,
       employeeSyncService,
@@ -123,6 +138,7 @@ export async function getDependencies(): Promise<Dependencies> {
       votingGroupService,
       configurationService,
       authService,
+      auditService,
     };
   }
 
