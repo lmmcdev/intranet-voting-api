@@ -261,6 +261,7 @@ export class VotingController {
         return authResult.response;
       }
 
+      const user = authResult.user;
       const votingPeriodId = request.params.votingPeriodId;
       if (!votingPeriodId) {
         return ResponseHelper.badRequest('Voting period ID is required');
@@ -269,8 +270,15 @@ export class VotingController {
       const body = (await request.json()) as UpdateVotingPeriodDto;
       const updatedPeriod = await this.dependencies.votingService.updateVotingPeriod(
         votingPeriodId,
-        body
+        body,
+        {
+          userId: user.userId,
+          userName: user.username,
+          userEmail: user.email,
+        }
       );
+
+      context.log(`User ${user.email} updated voting period ${votingPeriodId}`);
       return ResponseHelper.ok(updatedPeriod);
     } catch (error) {
       context.error('Error updating voting period:', error);
@@ -295,12 +303,19 @@ export class VotingController {
         return authResult.response;
       }
 
+      const user = authResult.user;
       const votingPeriodId = request.params.votingPeriodId;
       if (!votingPeriodId) {
         return ResponseHelper.badRequest('Voting period ID is required');
       }
 
-      const result = await this.dependencies.votingService.closeVotingPeriod(votingPeriodId);
+      const result = await this.dependencies.votingService.closeVotingPeriod(votingPeriodId, {
+        userId: user.userId,
+        userName: user.username,
+        userEmail: user.email,
+      });
+
+      context.log(`User ${user.email} closed voting period ${votingPeriodId}`);
       return ResponseHelper.ok(result);
     } catch (error) {
       context.error('Error closing voting period:', error);
@@ -336,7 +351,11 @@ export class VotingController {
         return ResponseHelper.badRequest('Voting period ID is required');
       }
 
-      const result = await this.dependencies.votingService.resetVotingPeriod(votingPeriodId);
+      const result = await this.dependencies.votingService.resetVotingPeriod(votingPeriodId, {
+        userId: user.userId,
+        userName: user.username,
+        userEmail: user.email,
+      });
 
       if (result.success) {
         context.log(
@@ -391,7 +410,9 @@ export class VotingController {
       const winner = await this.dependencies.votingService.getCurrentWinner();
 
       if (!winner) {
-        return ResponseHelper.notFound('No current winner found. No closed voting periods available.');
+        return ResponseHelper.notFound(
+          'No current winner found. No closed voting periods available.'
+        );
       }
 
       return ResponseHelper.ok(winner);
@@ -671,7 +692,7 @@ export class VotingController {
       const body = (await request.json()) as { count?: number };
       const count = body.count || 10;
 
-      if (count < 1 || count > 1000) {
+      if (count < 1) {
         return ResponseHelper.badRequest('Count must be between 1 and 1000');
       }
 
@@ -800,6 +821,38 @@ export class VotingController {
       return ResponseHelper.ok(reactions);
     } catch (error) {
       context.error('Error getting winner reactions:', error);
+      if (error instanceof Error) {
+        return ResponseHelper.badRequest(error.message);
+      }
+      return ResponseHelper.internalServerError();
+    }
+  }
+
+  async getVotingPeriodAuditHistory(
+    request: HttpRequest,
+    context: InvocationContext
+  ): Promise<HttpResponseInit> {
+    try {
+      if (request.method !== 'GET') {
+        return ResponseHelper.methodNotAllowed();
+      }
+
+      const authResult = await AuthHelper.requireAuth(request, context);
+      if (!authResult.success) {
+        return authResult.response;
+      }
+
+      const votingPeriodId = request.params.votingPeriodId;
+      if (!votingPeriodId) {
+        return ResponseHelper.badRequest('Voting period ID is required');
+      }
+
+      const auditHistory = await this.dependencies.votingService.getVotingPeriodAuditHistory(
+        votingPeriodId
+      );
+      return ResponseHelper.ok(auditHistory);
+    } catch (error) {
+      context.error('Error getting voting period audit history:', error);
       if (error instanceof Error) {
         return ResponseHelper.badRequest(error.message);
       }
@@ -1165,4 +1218,20 @@ app.http('remove-winner-reaction', {
   authLevel: 'anonymous',
   route: 'voting/winners/{winnerId}/reactions/{emoji}',
   handler: removeWinnerReactionFunction,
+});
+
+const getVotingPeriodAuditHistoryFunction = async (
+  request: HttpRequest,
+  context: InvocationContext
+): Promise<HttpResponseInit> => {
+  const dependencies = await getDependencies();
+  const controller = new VotingController(dependencies);
+  return controller.getVotingPeriodAuditHistory(request, context);
+};
+
+app.http('get-voting-period-audit-history', {
+  methods: ['GET', 'OPTIONS'],
+  authLevel: 'anonymous',
+  route: 'voting/{votingPeriodId}/audit-history',
+  handler: getVotingPeriodAuditHistoryFunction,
 });
