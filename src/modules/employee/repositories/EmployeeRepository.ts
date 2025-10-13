@@ -200,19 +200,53 @@ export class EmployeeRepository {
       };
     }
 
-    // Use native Cosmos DB pagination
+    // Use offset-based pagination (Cosmos DB SDK doesn't support continuation tokens for ORDER BY cross-partition queries)
     const pageSize = pagination.pageSize || 50;
-    const queryIterator = container.items.query<Employee>(querySpec, {
-      maxItemCount: pageSize,
-      continuationToken: pagination.continuationToken,
+
+    // Decode continuation token to get offset
+    let offset = 0;
+    if (pagination.continuationToken) {
+      try {
+        const decoded = Buffer.from(pagination.continuationToken, 'base64').toString('utf-8');
+        const tokenData = JSON.parse(decoded);
+        offset = tokenData.offset || 0;
+      } catch (error) {
+        console.error('Failed to decode continuation token:', error);
+        offset = 0;
+      }
+    }
+
+    // Add OFFSET/LIMIT to query (fetch +1 to check if more exist)
+    const paginatedQuery = `${query} OFFSET ${offset} LIMIT ${pageSize + 1}`;
+    const paginatedQuerySpec = {
+      query: paginatedQuery,
+      parameters,
+    };
+
+    const { resources } = await container.items.query<Employee>(paginatedQuerySpec).fetchAll();
+
+    // Check if there are more results
+    const hasMore = resources.length > pageSize;
+    const employees = hasMore ? resources.slice(0, pageSize) : resources;
+
+    // Create continuation token for next page
+    const nextToken = hasMore
+      ? Buffer.from(JSON.stringify({ offset: offset + pageSize })).toString('base64')
+      : undefined;
+
+    console.log('[EmployeeRepository] Offset pagination result:', {
+      offset,
+      requestedCount: pageSize,
+      fetchedCount: resources.length,
+      returnedCount: employees.length,
+      hasMore,
+      hasContinuationToken: !!nextToken
     });
 
-    const { resources, continuationToken, hasMoreResults } = await queryIterator.fetchNext();
-
     return {
-      employees: resources as Employee[],
-      continuationToken: continuationToken,
-      hasMore: hasMoreResults,
+      employees: employees as Employee[],
+      continuationToken: nextToken,
+      hasMore,
     };
   }
 

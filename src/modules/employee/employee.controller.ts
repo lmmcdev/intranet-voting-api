@@ -70,19 +70,26 @@ export class EmployeeController {
         filters.location = location;
       }
 
-      // Pagination parameters
-      const pageSize = request.query.get('pageSize');
+      // Pagination parameters (use standard 'limit' parameter)
+      const limit = request.query.get('limit');
       const continuationToken = request.query.get('continuationToken');
 
       const pagination =
-        pageSize || continuationToken
+        limit || continuationToken
           ? {
-              pageSize: pageSize ? parseInt(pageSize, 10) : undefined,
+              limit: limit ? parseInt(limit, 10) : undefined,
               continuationToken: continuationToken || undefined,
             }
           : undefined;
 
       const result = await this.employeeService.getEmployees(filters, pagination);
+
+      // If pagination was requested, return paginated format
+      if (pagination && 'data' in result) {
+        return ResponseHelper.paginated(result);
+      }
+
+      // Otherwise return simple format for backward compatibility
       return ResponseHelper.ok(result);
     } catch (error) {
       context.error('Error getting employees:', error);
@@ -426,7 +433,8 @@ export class EmployeeController {
       const votingGroup = request.query.get('votingGroup');
       if (votingGroup) filters.votingGroup = votingGroup;
 
-      const { employees } = await this.employeeService.getEmployees(filters);
+      const result = await this.employeeService.getEmployees(filters);
+      const employees = 'data' in result ? result.data : result.employees;
 
       // Build CSV content
       const headers = [

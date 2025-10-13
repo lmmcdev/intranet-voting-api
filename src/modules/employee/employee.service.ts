@@ -11,6 +11,7 @@ import {
 import { NameHelper } from '../../common/utils/NameHelper';
 import { AuditService } from '../../common/services/AuditService';
 import { AuditEntity, AuditAction } from '../../common/models/AuditLog';
+import { PaginatedResponse, calculatePaginationMeta } from '../../common/models/Pagination';
 
 export class EmployeeService {
   private auditService?: AuditService;
@@ -33,15 +34,35 @@ export class EmployeeService {
       votingGroup?: string;
     },
     pagination?: {
-      pageSize?: number;
+      limit?: number;
       continuationToken?: string;
     }
-  ): Promise<{
-    employees: Employee[];
-    continuationToken?: string;
-    hasMore: boolean;
-  }> {
-    return this.employeeRepository.findAll(filters, pagination);
+  ): Promise<PaginatedResponse<Employee> | { employees: Employee[]; continuationToken?: string; hasMore: boolean }> {
+    // Convert limit to pageSize for repository
+    const repoPagination = pagination ? {
+      pageSize: pagination.limit,
+      continuationToken: pagination.continuationToken
+    } : undefined;
+
+    const result = await this.employeeRepository.findAll(filters, repoPagination);
+
+    // If pagination was requested, return PaginatedResponse format
+    if (pagination) {
+      const meta = calculatePaginationMeta(
+        result.employees.length,
+        pagination.limit || 50,
+        result.continuationToken,
+        result.hasMore
+      );
+
+      return {
+        data: result.employees,
+        meta
+      };
+    }
+
+    // Otherwise return old format for backward compatibility
+    return result;
   }
 
   async getEmployeeById(id: string): Promise<Employee | null> {
