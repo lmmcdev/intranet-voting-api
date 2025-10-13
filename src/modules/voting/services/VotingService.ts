@@ -196,6 +196,11 @@ export class VotingService {
       const groupTotalNominations = groupNominations.length;
 
       const groupResults: VoteResult[] = employeeVotes.map((vote, index) => {
+        const reasons = groupNominations
+          .filter(n => n.nominatedEmployeeId === vote.employeeId)
+          .map(n => {
+            return { comment: n.reason, username: n.nominatorUserName, date: n.createdAt };
+          });
         const employee = employeeMap.get(vote.employeeId);
         return {
           votingPeriodId,
@@ -204,6 +209,7 @@ export class VotingService {
           department: employee?.department || 'Unknown',
           position: employee?.position || 'Unknown',
           nominationCount: vote.count,
+          reasons,
           percentage: Math.round((vote.count / groupTotalNominations) * 100 * 100) / 100,
           rank: index + 1,
           averageCriteria: vote.averageCriteria,
@@ -349,11 +355,6 @@ export class VotingService {
       throw new Error('No active voting period found');
     }
 
-    // Find existing nomination by nominator username and current voting period
-    /*  const existingNomination = await this.nominationRepository.findByNominatorUsername(
-      nominatorUserName,
-      currentPeriod.id
-    ); */
     const existingNomination = await this.nominationRepository.findById(nominationId);
     if (!existingNomination) {
       throw new Error('No existing nomination found to update');
@@ -735,7 +736,7 @@ export class VotingService {
 
     // Save the general winner (único ganador del período)
     const generalWinnerHistory: WinnerHistory = {
-      id: this.generateId(),
+      id: `winner-${period.year}-${period.month}-general`,
       votingPeriodId,
       year: period.year,
       month: period.month,
@@ -836,25 +837,17 @@ export class VotingService {
 
     // 2. Find the most recent CLOSED period
     let closedPeriod: VotingPeriod | null = null;
+    let recentWinner: WinnerHistory | null = null;
 
     for (const period of recentPeriods) {
       if (period.status === VotingPeriodStatus.CLOSED) {
         closedPeriod = period;
-        break; // Take the first closed period (most recent)
+        recentWinner = await this.winnerHistoryRepository.findGeneralWinnerByPeriod(period.id);
+        if (recentWinner) break; // Exit loop if found
       }
     }
 
-    // If no closed period found, return null
-    if (!closedPeriod) {
-      return null;
-    }
-
-    // 3. Get the general winner for this period
-    const generalWinner = await this.winnerHistoryRepository.findGeneralWinnerByPeriod(
-      closedPeriod.id
-    );
-
-    return generalWinner;
+    return recentWinner;
   }
 
   async getYearlyWinners(): Promise<WinnerHistory[]> {
@@ -1057,5 +1050,124 @@ export class VotingService {
     }
 
     return await this.auditService.getEntityAuditLogs(AuditEntity.VOTING_PERIOD, votingPeriodId);
+  }
+
+  async deleteVotingPeriod(
+    votingPeriodId: string,
+    userContext?: { userId: string; userName: string; userEmail?: string }
+  ): Promise<{ success: boolean; message: string }> {
+    const period = await this.votingPeriodRepository.findById(votingPeriodId);
+    if (!period) {
+      throw new Error('Voting period not found');
+    }
+
+    // Get related data for audit log
+    const nominations = await this.nominationRepository.findByVotingPeriod(votingPeriodId);
+    const winners = await this.winnerHistoryRepository.findByVotingPeriod(votingPeriodId);
+
+    // Delete related data first
+    for (const nomination of nominations) {
+      await this.nominationRepository.delete(nomination.id);
+    }
+
+    await this.winnerHistoryRepository.deleteByVotingPeriod(votingPeriodId);
+
+    // Delete the voting period
+    await this.votingPeriodRepository.delete(votingPeriodId);
+
+    // Invalidate cache
+    this.cacheService.delete(`voting-results:${votingPeriodId}`);
+
+    // Log audit
+    if (this.auditService && userContext) {
+      try {
+        await this.auditService.log({
+          entityType: AuditEntity.VOTING_PERIOD,
+          entityId: votingPeriodId,
+          action: AuditAction.DELETE,
+          userId: userContext.userId,
+          userName: userContext.userName,
+          userEmail: userContext.userEmail,
+          metadata: {
+            year: period.year,
+            month: period.month,
+            status: period.status,
+            nominationsDeleted: nominations.length,
+            winnersDeleted: winners.length,
+          },
+        });
+      } catch (error) {
+        console.error('Failed to log audit:', error);
+      }
+    }
+
+    return {
+      success: true,
+      message: `Voting period deleted successfully. Removed ${nominations.length} nominations and ${winners.length} winners.`,
+    };
+  }
+
+  async createVotingPeriod(
+    data: {
+      year: number;
+      month: number;
+      startDate: Date;
+      endDate: Date;
+      description?: string;
+      status?: VotingPeriodStatus;
+    },
+    userContext?: { userId: string; userName: string; userEmail?: string }
+  ): Promise<VotingPeriod> {
+    // Validate that no period exists for this year/month combination
+    const month = data.month < 10 ? `0${data.month}` : data.month;
+    const yearMonth = `${data.year}-${month}`;
+    const existingPeriod = await this.votingPeriodRepository.findByYearAndMonth(
+      data.year,
+      data.month
+    );
+
+    if (existingPeriod) {
+      throw new Error(`A voting period already exists for ${data.year}-${data.month}`);
+    }
+
+    // Create new voting period
+    const newPeriod: VotingPeriod = {
+      id: `vp-${yearMonth}`,
+      year: data.year,
+      month: data.month,
+      startDate: data.startDate,
+      endDate: data.endDate,
+      status: data.status || VotingPeriodStatus.ACTIVE,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...(data.description && { description: data.description }),
+    };
+
+    const createdPeriod = await this.votingPeriodRepository.create(newPeriod);
+
+    // Log audit
+    if (this.auditService && userContext) {
+      try {
+        await this.auditService.log({
+          entityType: AuditEntity.VOTING_PERIOD,
+          entityId: createdPeriod.id,
+          action: AuditAction.CREATE,
+          userId: userContext.userId,
+          userName: userContext.userName,
+          userEmail: userContext.userEmail,
+          metadata: {
+            year: createdPeriod.year,
+            month: createdPeriod.month,
+            status: createdPeriod.status,
+            startDate: createdPeriod.startDate,
+            endDate: createdPeriod.endDate,
+          },
+        });
+      } catch (error) {
+        console.error('Failed to log audit:', error);
+      }
+    }
+
+    return createdPeriod;
   }
 }

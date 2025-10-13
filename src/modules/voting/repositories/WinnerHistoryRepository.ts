@@ -15,7 +15,7 @@ export class WinnerHistoryRepository {
   async findAll(): Promise<WinnerHistory[]> {
     const container = await this.cosmosClient.getContainer(this.containerName);
     const querySpec = {
-      query: 'SELECT * FROM c ORDER BY c.createdAt DESC',
+      query: 'SELECT * FROM c ORDER BY c.id DESC',
     };
     const { resources } = await container.items.query<WinnerHistory>(querySpec).fetchAll();
     return resources as WinnerHistory[];
@@ -91,18 +91,18 @@ export class WinnerHistoryRepository {
     return resources as WinnerHistory[];
   }
 
-  async findGeneralWinnerByPeriod(votingPeriodId: string): Promise<WinnerHistory | null> {
+  async findGeneralWinnerByPeriod(periodId: string): Promise<WinnerHistory | null> {
     const container = await this.cosmosClient.getContainer(this.containerName);
     const querySpec = {
       query:
         'SELECT * FROM c WHERE c.votingPeriodId = @votingPeriodId AND c.winnerType = @winnerType',
       parameters: [
-        { name: '@votingPeriodId', value: votingPeriodId },
+        { name: '@votingPeriodId', value: periodId },
         { name: '@winnerType', value: WinnerType.GENERAL },
       ],
     };
     const { resources } = await container.items.query<WinnerHistory>(querySpec).fetchAll();
-    return resources.length > 0 ? (resources[0] as WinnerHistory) : null;
+    return resources.length > 0 ? resources[0] : null;
   }
 
   async findGroupWinnersByPeriod(votingPeriodId: string): Promise<WinnerHistory[]> {
@@ -158,7 +158,9 @@ export class WinnerHistoryRepository {
 
     // Mark the new yearly winner
     const updatedWinner = { ...winner, isYearlyWinner: true };
-    const { resource } = await container.item(winnerId, winnerId).replace<WinnerHistory>(updatedWinner);
+    const { resource } = await container
+      .item(winnerId, winnerId)
+      .replace<WinnerHistory>(updatedWinner);
     return resource as WinnerHistory;
   }
 
@@ -171,7 +173,9 @@ export class WinnerHistoryRepository {
     }
 
     const updatedWinner = { ...winner, isYearlyWinner: false };
-    const { resource } = await container.item(winnerId, winnerId).replace<WinnerHistory>(updatedWinner);
+    const { resource } = await container
+      .item(winnerId, winnerId)
+      .replace<WinnerHistory>(updatedWinner);
     return resource as WinnerHistory;
   }
 
@@ -187,7 +191,7 @@ export class WinnerHistoryRepository {
 
     // Check if user already reacted with this emoji
     const existingReactionIndex = reactions.findIndex(
-      (r) => r.userId === reaction.userId && r.emoji === reaction.emoji
+      r => r.userId === reaction.userId && r.emoji === reaction.emoji
     );
 
     if (existingReactionIndex !== -1) {
@@ -197,7 +201,9 @@ export class WinnerHistoryRepository {
 
     reactions.push(reaction);
     const updatedWinner = { ...winner, reactions };
-    const { resource } = await container.item(winnerId, winnerId).replace<WinnerHistory>(updatedWinner);
+    const { resource } = await container
+      .item(winnerId, winnerId)
+      .replace<WinnerHistory>(updatedWinner);
     return resource as WinnerHistory;
   }
 
@@ -210,12 +216,12 @@ export class WinnerHistoryRepository {
     }
 
     const reactions = winner.reactions || [];
-    const updatedReactions = reactions.filter(
-      (r) => !(r.userId === userId && r.emoji === emoji)
-    );
+    const updatedReactions = reactions.filter(r => !(r.userId === userId && r.emoji === emoji));
 
     const updatedWinner = { ...winner, reactions: updatedReactions };
-    const { resource } = await container.item(winnerId, winnerId).replace<WinnerHistory>(updatedWinner);
+    const { resource } = await container
+      .item(winnerId, winnerId)
+      .replace<WinnerHistory>(updatedWinner);
     return resource as WinnerHistory;
   }
 
