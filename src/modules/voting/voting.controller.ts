@@ -754,7 +754,11 @@ export class VotingController {
 
       const votingPeriodId = request.query.get('votingPeriodId');
 
-      const results = await this.dependencies.votingService.getEmployeeResults(
+      /*   const results = await this.dependencies.votingService.getEmployeeResults(
+        employeeId,
+        votingPeriodId || undefined
+      ); */
+      const results = await this.dependencies.votingService.getVotingResults(
         employeeId,
         votingPeriodId || undefined
       );
@@ -943,9 +947,8 @@ export class VotingController {
         return ResponseHelper.badRequest('Voting period ID is required');
       }
 
-      const auditHistory = await this.dependencies.votingService.getVotingPeriodAuditHistory(
-        votingPeriodId
-      );
+      const auditHistory =
+        await this.dependencies.votingService.getVotingPeriodAuditHistory(votingPeriodId);
       return ResponseHelper.ok(auditHistory);
     } catch (error) {
       context.error('Error getting voting period audit history:', error);

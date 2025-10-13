@@ -199,7 +199,12 @@ export class VotingService {
         const reasons = groupNominations
           .filter(n => n.nominatedEmployeeId === vote.employeeId)
           .map(n => {
-            return { comment: n.reason, username: n.nominatorUserName, date: n.createdAt };
+            return {
+              comment: n.reason,
+              username: n.nominatorUserName,
+              date: n.createdAt,
+              criteria: n.criteria,
+            };
           });
         const employee = employeeMap.get(vote.employeeId);
         return {
@@ -272,6 +277,45 @@ export class VotingService {
 
     return results;
   }
+
+  /*   // voting results by employee id and optional voting period id
+  async getVotingResultsByEmployee(
+    employeeId: string,
+    votingPeriodId: string
+  ): Promise<VoteResult[]> {
+    const results: VoteResult[] = [];
+    try {
+      const nominations = await this.nominationRepository.findByPeriodAndEmployeeId(
+        employeeId,
+        votingPeriodId
+      );
+      if (nominations.length === 0) {
+        return [];
+      }
+
+      // transform nominations to results
+      for (const nomination of nominations) {
+        const employee = await this.employeeService.getEmployeeById(nomination.nominatedEmployeeId);
+        results.push({
+          votingPeriodId,
+          employeeId: nomination.nominatedEmployeeId,
+          employeeName: employee?.fullName || 'Unknown',
+          department: employee?.department || 'Unknown',
+          position: employee?.position || 'Unknown',
+          nominationCount: 1,
+          reasons: nomination ? [nomination.reason] : [],
+          percentage: 100,
+          rank: 1,
+          averageCriteria: nomination.criteria,
+        });
+      }
+
+      return results;
+    } catch (error) {
+      console.error('Error fetching nominations:', error);
+    }
+    return results;
+  } */
 
   private aggregateVotes(
     nominations: Nomination[]

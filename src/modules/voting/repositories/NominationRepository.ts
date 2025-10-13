@@ -133,4 +133,21 @@ export class NominationRepository {
     const container = await this.cosmosClient.getContainer(this.containerName);
     await container.item(id, id).delete();
   }
+
+  async findByPeriodAndEmployeeId(
+    employeeId: string,
+    votingPeriodId: string
+  ): Promise<Nomination[]> {
+    const container = await this.cosmosClient.getContainer(this.containerName);
+    const querySpec = {
+      query:
+        'SELECT * FROM c WHERE c.nominatedEmployeeId = @employeeId AND c.votingPeriodId = @votingPeriodId',
+      parameters: [
+        { name: '@employeeId', value: employeeId },
+        { name: '@votingPeriodId', value: votingPeriodId },
+      ],
+    };
+    const { resources } = await container.items.query<Nomination>(querySpec).fetchAll();
+    return resources as Nomination[];
+  }
 }
