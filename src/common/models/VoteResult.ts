@@ -1,4 +1,4 @@
-import { Criteria } from "../../modules/voting/dto/create-nomination.dto";
+import { Criteria } from '../../modules/voting/dto/create-nomination.dto';
 
 export interface VoteResult {
   votingPeriodId: string;
