@@ -570,6 +570,47 @@ export class VotingController {
     }
   }
 
+  /**
+   * Get nominations for current period with pagination
+   * Query params:
+   * - limit: Number of items per page (default: 10, max: 100)
+   * - continuationToken: Token from previous page response
+   *
+   * Example:
+   * GET /nominations/current-period?limit=20
+   * GET /nominations/current-period?limit=20&continuationToken=ABC123
+   */
+  async getNominationsForCurrentPeriodPaginated(
+    request: HttpRequest,
+    context: InvocationContext
+  ): Promise<HttpResponseInit> {
+    try {
+      if (request.method !== 'GET') {
+        return ResponseHelper.methodNotAllowed();
+      }
+
+      const authResult = await AuthHelper.requireAuth(request, context);
+      if (!authResult.success) {
+        return authResult.response;
+      }
+
+      // Parse pagination params from query string
+      const limit = request.query.get('limit');
+      const continuationToken = request.query.get('continuationToken');
+
+      const result =
+        await this.dependencies.votingService.getNominationsForCurrentPeriodPaginated({
+          limit: limit ? parseInt(limit) : undefined,
+          continuationToken: continuationToken || undefined,
+        });
+
+      return ResponseHelper.paginated(result);
+    } catch (error) {
+      context.error('Error getting paginated nominations:', error);
+      return ResponseHelper.internalServerError();
+    }
+  }
+
   async selectRandomWinner(
     request: HttpRequest,
     context: InvocationContext
@@ -1271,6 +1312,22 @@ app.http('get-my-nominations', {
   authLevel: 'anonymous',
   route: 'nominations/my',
   handler: getMyNominationsFunction,
+});
+
+const getNominationsForCurrentPeriodPaginatedFunction = async (
+  request: HttpRequest,
+  context: InvocationContext
+): Promise<HttpResponseInit> => {
+  const dependencies = await getDependencies();
+  const controller = new VotingController(dependencies);
+  return controller.getNominationsForCurrentPeriodPaginated(request, context);
+};
+
+app.http('get-nominations-current-period-paginated', {
+  methods: ['GET', 'OPTIONS'],
+  authLevel: 'anonymous',
+  route: 'nominations/current-period',
+  handler: getNominationsForCurrentPeriodPaginatedFunction,
 });
 
 app.http('select-random-winner', {
