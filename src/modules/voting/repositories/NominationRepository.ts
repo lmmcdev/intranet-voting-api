@@ -39,13 +39,12 @@ export class NominationRepository {
   }
 
   /**
-   * Find nominations by voting period with pagination using offset-based approach
-   * Note: Cosmos DB SDK v4 has issues with continuation tokens in fetchNext()
-   * Using offset-based pagination as a workaround
+   * Find nominations by voting period with efficient offset-based pagination
+   * Uses OFFSET/LIMIT which is well-supported in Cosmos DB SQL API
    *
    * @param votingPeriodId - The voting period ID
    * @param maxItemCount - Number of items per page (default: 10)
-   * @param offset - Number of items to skip (calculated from page number)
+   * @param offset - Number of items to skip (calculated from continuation token)
    * @returns Query result with items and continuation token
    */
   async findByVotingPeriodPaginated(
@@ -55,7 +54,7 @@ export class NominationRepository {
   ): Promise<CosmosQueryResult<Nomination>> {
     const container = await this.cosmosClient.getContainer(this.containerName);
 
-    // Use OFFSET/LIMIT for pagination (Cosmos DB supports this in SQL API)
+    // Fetch items with OFFSET/LIMIT
     const querySpec = {
       query: `SELECT * FROM c
               WHERE c.votingPeriodId = @votingPeriodId
@@ -70,33 +69,25 @@ export class NominationRepository {
 
     const { resources } = await container.items.query<Nomination>(querySpec).fetchAll();
 
-    // Check if there are more results by trying to fetch one more item
-    const checkMoreQuery = {
-      query: `SELECT VALUE COUNT(1) FROM c
-              WHERE c.votingPeriodId = @votingPeriodId`,
-      parameters: [{ name: '@votingPeriodId', value: votingPeriodId }],
+    // Check if there are more results by fetching one extra item at next offset
+    const checkMoreSpec = {
+      query: `SELECT TOP 1 c.id FROM c
+              WHERE c.votingPeriodId = @votingPeriodId
+              ORDER BY c.createdAt DESC
+              OFFSET @nextOffset LIMIT 1`,
+      parameters: [
+        { name: '@votingPeriodId', value: votingPeriodId },
+        { name: '@nextOffset', value: offset + maxItemCount },
+      ],
     };
 
-    const { resources: countResult } = await container.items
-      .query<number>(checkMoreQuery)
-      .fetchAll();
-    const totalCount = countResult[0] || 0;
-    const hasMore = offset + maxItemCount < totalCount;
+    const { resources: nextPageCheck } = await container.items.query(checkMoreSpec).fetchAll();
+    const hasMore = nextPageCheck.length > 0;
 
-    // Create a simple continuation token (next offset as base64)
-    const nextToken = hasMore ? Buffer.from((offset + maxItemCount).toString()).toString('base64') : undefined;
-
-    // Debug logging
-    console.log('[Pagination Debug]', {
-      votingPeriodId,
-      maxItemCount,
-      offset,
-      resourcesCount: resources.length,
-      totalCount,
-      nextOffset: offset + maxItemCount,
-      nextContinuationToken: nextToken,
-      hasMoreResults: hasMore,
-    });
+    // Create continuation token (next offset as base64)
+    const nextToken = hasMore
+      ? Buffer.from(JSON.stringify({ offset: offset + maxItemCount })).toString('base64')
+      : undefined;
 
     return {
       resources: resources as Nomination[],

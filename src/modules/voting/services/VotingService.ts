@@ -171,7 +171,9 @@ export class VotingService {
     let offset = 0;
     if (continuationToken) {
       try {
-        offset = parseInt(Buffer.from(continuationToken, 'base64').toString(), 10);
+        const decoded = Buffer.from(continuationToken, 'base64').toString('utf-8');
+        const tokenData = JSON.parse(decoded);
+        offset = tokenData.offset || 0;
       } catch (error) {
         console.error('Failed to decode continuation token:', error);
         offset = 0;
