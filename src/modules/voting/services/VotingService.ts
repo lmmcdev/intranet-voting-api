@@ -524,17 +524,70 @@ export class VotingService {
   }
 
   async getWinnersGrouped(): Promise<WinnersContainer[]> {
-    const recentPeriods = await this.votingPeriodRepository.findRecentPeriods();
     const winnersContainers: WinnersContainer[] = [];
 
-    // Process periods in parallel - Include both ACTIVE and CLOSED periods
-    const containerPromises = recentPeriods
-      .filter(
-        period =>
-          period.status === VotingPeriodStatus.ACTIVE ||
-          period.status === VotingPeriodStatus.PENDING
-      )
-      .map(async period => {
+    // 1. Get all saved winners from history (for CLOSED periods)
+    const allWinners = await this.winnerHistoryRepository.findAll();
+
+    // Group winners by voting period
+    const winnersByPeriod = new Map<string, WinnerHistory[]>();
+    const periodsWithWinners = new Set<string>();
+
+    for (const winner of allWinners) {
+      // Only include group winners (not general winners)
+      if (winner.winnerType === WinnerType.BY_GROUP) {
+        periodsWithWinners.add(winner.votingPeriodId);
+        if (!winnersByPeriod.has(winner.votingPeriodId)) {
+          winnersByPeriod.set(winner.votingPeriodId, []);
+        }
+        winnersByPeriod.get(winner.votingPeriodId)!.push(winner);
+      }
+    }
+
+    // Build containers for periods with saved winners
+    for (const [votingPeriodId, winners] of winnersByPeriod.entries()) {
+      if (winners.length === 0) continue;
+
+      const winnersByGroup = winners.map(winner => {
+        const voteResult: VoteResult = {
+          votingPeriodId: winner.votingPeriodId,
+          employeeId: winner.employeeId,
+          employeeName: winner.employeeName,
+          department: winner.department,
+          position: winner.position,
+          nominationCount: winner.nominationCount,
+          percentage: winner.percentage,
+          rank: winner.rank,
+          averageCriteria: winner.averageCriteria,
+          votingGroup: winner.votingGroup,
+        };
+
+        return {
+          votingGroup: winner.votingGroup || 'default',
+          winner: voteResult,
+        };
+      });
+
+      winnersContainers.push({
+        votingPeriodId,
+        year: winners[0].year,
+        month: winners[0].month,
+        winnersByGroup,
+      });
+    }
+
+    // 2. Get PENDING/ACTIVE periods that don't have saved winners yet
+    const recentPeriods = await this.votingPeriodRepository.findRecentPeriods();
+    const pendingPeriods = recentPeriods.filter(
+      period =>
+        (period.status === VotingPeriodStatus.PENDING ||
+          period.status === VotingPeriodStatus.ACTIVE) &&
+        !periodsWithWinners.has(period.id)
+    );
+
+    // Calculate results for pending periods (only if they have nominations)
+    for (const period of pendingPeriods) {
+      try {
         const results = await this.getVotingResults(period.id);
 
         if (results.winners && results.winners.length > 0) {
@@ -543,18 +596,24 @@ export class VotingService {
             winner,
           }));
 
-          return {
+          winnersContainers.push({
             votingPeriodId: period.id,
             year: period.year,
             month: period.month,
             winnersByGroup,
-          };
+          });
         }
-        return null;
-      });
+      } catch (error) {
+        console.error(`Error calculating results for pending period ${period.id}:`, error);
+        // Continue with other periods
+      }
+    }
 
-    const containers = await Promise.all(containerPromises);
-    winnersContainers.push(...containers.filter((c): c is WinnersContainer => c !== null));
+    // Sort by year and month (most recent first)
+    winnersContainers.sort((a, b) => {
+      if (a.year !== b.year) return b.year - a.year;
+      return b.month - a.month;
+    });
 
     return winnersContainers;
   }
@@ -1028,9 +1087,10 @@ export class VotingService {
       }
 
       // Get eligible employees (both nominators and nominees)
-      const { employees: allEmployees } = await this.employeeService.getEmployees({
+      const employeeResult = await this.employeeService.getEmployees({
         isActive: true,
       });
+      const allEmployees = 'data' in employeeResult ? employeeResult.data : employeeResult.employees;
 
       if (allEmployees.length < 2) {
         result.errors.push('Not enough employees to create nominations');

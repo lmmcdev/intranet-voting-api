@@ -11,6 +11,12 @@ export interface VoteResult {
   rank: number;
   averageCriteria: Criteria;
   votingGroup?: string;
+  reasons?: {
+    comment: string;
+    username: string;
+    date: Date;
+    criteria: Criteria;
+  }[];
 }
 
 export interface VotingPeriodResults {
