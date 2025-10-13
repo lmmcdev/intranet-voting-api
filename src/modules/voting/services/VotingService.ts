@@ -196,6 +196,11 @@ export class VotingService {
       const groupTotalNominations = groupNominations.length;
 
       const groupResults: VoteResult[] = employeeVotes.map((vote, index) => {
+        const reasons = groupNominations
+          .filter(n => n.nominatedEmployeeId === vote.employeeId)
+          .map(n => {
+            return { comment: n.reason, username: n.nominatorUserName, date: n.createdAt };
+          });
         const employee = employeeMap.get(vote.employeeId);
         return {
           votingPeriodId,
@@ -204,6 +209,7 @@ export class VotingService {
           department: employee?.department || 'Unknown',
           position: employee?.position || 'Unknown',
           nominationCount: vote.count,
+          reasons,
           percentage: Math.round((vote.count / groupTotalNominations) * 100 * 100) / 100,
           rank: index + 1,
           averageCriteria: vote.averageCriteria,
@@ -349,11 +355,6 @@ export class VotingService {
       throw new Error('No active voting period found');
     }
 
-    // Find existing nomination by nominator username and current voting period
-    /*  const existingNomination = await this.nominationRepository.findByNominatorUsername(
-      nominatorUserName,
-      currentPeriod.id
-    ); */
     const existingNomination = await this.nominationRepository.findById(nominationId);
     if (!existingNomination) {
       throw new Error('No existing nomination found to update');
