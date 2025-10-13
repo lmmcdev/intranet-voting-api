@@ -160,31 +160,18 @@ export class VotingService {
     if (!currentPeriod) {
       return {
         data: [],
-        meta: calculatePaginationMeta(0, pagination.limit || 10, undefined),
+        meta: calculatePaginationMeta(0, pagination.limit || 10, undefined, false),
       };
     }
 
     // Parse and validate pagination params
     const { limit, continuationToken } = parsePaginationParams(pagination);
 
-    // Decode continuation token to get offset
-    let offset = 0;
-    if (continuationToken) {
-      try {
-        const decoded = Buffer.from(continuationToken, 'base64').toString('utf-8');
-        const tokenData = JSON.parse(decoded);
-        offset = tokenData.offset || 0;
-      } catch (error) {
-        console.error('Failed to decode continuation token:', error);
-        offset = 0;
-      }
-    }
-
-    // Query with pagination using offset
+    // Query with offset-based pagination (continuation token contains base64-encoded offset)
     const result = await this.nominationRepository.findByVotingPeriodPaginated(
       currentPeriod.id,
       limit,
-      offset
+      continuationToken || undefined
     );
 
     // Enrich nominations with employee data
@@ -207,7 +194,8 @@ export class VotingService {
     const meta = calculatePaginationMeta(
       nominationsWithEmployee.length,
       limit,
-      result.continuationToken
+      result.continuationToken,
+      result.hasMoreResults
     );
 
     return {
