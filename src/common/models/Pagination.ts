@@ -86,13 +86,17 @@ export function parsePaginationParams(params: PaginationParams): Required<Pagina
 export function calculatePaginationMeta(
   itemCount: number,
   itemsPerPage: number,
-  continuationToken: string | undefined
+  continuationToken: string | undefined,
+  hasMoreResults?: boolean
 ): PaginationMeta {
+  // Use hasMoreResults if provided (from Cosmos DB), otherwise fallback to checking continuationToken
+  const hasNextPage = hasMoreResults !== undefined ? hasMoreResults : !!continuationToken;
+
   return {
     itemCount,
     itemsPerPage,
     continuationToken: continuationToken || null,
-    hasNextPage: !!continuationToken,
+    hasNextPage,
   };
 }
 
