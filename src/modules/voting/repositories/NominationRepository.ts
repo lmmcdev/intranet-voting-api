@@ -1,6 +1,7 @@
 import { CosmosClient } from '../../../common/utils/CosmosClient';
 import { Nomination, NominationWithEmployee } from '../../../common/models/Nomination';
 import { Employee } from '../../employee/models/employee.model';
+import { CosmosQueryResult } from '../../../common/models/Pagination';
 
 export class NominationRepository {
   private readonly containerName = 'nominations';
@@ -35,6 +36,64 @@ export class NominationRepository {
     };
     const { resources } = await container.items.query<Nomination>(querySpec).fetchAll();
     return resources as Nomination[];
+  }
+
+  /**
+   * Find nominations by voting period with efficient offset-based pagination
+   * Uses OFFSET/LIMIT which is well-supported in Cosmos DB SQL API
+   *
+   * @param votingPeriodId - The voting period ID
+   * @param maxItemCount - Number of items per page (default: 10)
+   * @param offset - Number of items to skip (calculated from continuation token)
+   * @returns Query result with items and continuation token
+   */
+  async findByVotingPeriodPaginated(
+    votingPeriodId: string,
+    maxItemCount: number = 10,
+    offset: number = 0
+  ): Promise<CosmosQueryResult<Nomination>> {
+    const container = await this.cosmosClient.getContainer(this.containerName);
+
+    // Fetch items with OFFSET/LIMIT
+    const querySpec = {
+      query: `SELECT * FROM c
+              WHERE c.votingPeriodId = @votingPeriodId
+              ORDER BY c.createdAt DESC
+              OFFSET @offset LIMIT @limit`,
+      parameters: [
+        { name: '@votingPeriodId', value: votingPeriodId },
+        { name: '@offset', value: offset },
+        { name: '@limit', value: maxItemCount },
+      ],
+    };
+
+    const { resources } = await container.items.query<Nomination>(querySpec).fetchAll();
+
+    // Check if there are more results by fetching one extra item at next offset
+    const checkMoreSpec = {
+      query: `SELECT TOP 1 c.id FROM c
+              WHERE c.votingPeriodId = @votingPeriodId
+              ORDER BY c.createdAt DESC
+              OFFSET @nextOffset LIMIT 1`,
+      parameters: [
+        { name: '@votingPeriodId', value: votingPeriodId },
+        { name: '@nextOffset', value: offset + maxItemCount },
+      ],
+    };
+
+    const { resources: nextPageCheck } = await container.items.query(checkMoreSpec).fetchAll();
+    const hasMore = nextPageCheck.length > 0;
+
+    // Create continuation token (next offset as base64)
+    const nextToken = hasMore
+      ? Buffer.from(JSON.stringify({ offset: offset + maxItemCount })).toString('base64')
+      : undefined;
+
+    return {
+      resources: resources as Nomination[],
+      continuationToken: nextToken,
+      hasMoreResults: hasMore,
+    };
   }
 
   async findByVotingPeriodWithEmployee(votingPeriodId: string): Promise<NominationWithEmployee[]> {

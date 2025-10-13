@@ -117,4 +117,25 @@ export class ResponseHelper {
       }
     };
   }
+
+  /**
+   * Special response for paginated data
+   * Returns: { success: true, data: [...], meta: {...} }
+   */
+  static paginated(paginatedResult: { data: any[]; meta: any }): HttpResponseInit {
+    return {
+      status: 200,
+      jsonBody: {
+        success: true,
+        data: DataCleaner.cleanForApiResponse(paginatedResult.data),
+        meta: paginatedResult.meta
+      },
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+      }
+    };
+  }
 }

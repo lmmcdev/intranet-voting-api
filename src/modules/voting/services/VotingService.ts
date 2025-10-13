@@ -19,6 +19,12 @@ import { EmployeeService } from '../../employee/employee.service';
 import { ConfigurationService } from '../../configuration/configuration.service';
 import { AuditService } from '../../../common/services/AuditService';
 import { AuditEntity, AuditAction } from '../../../common/models/AuditLog';
+import {
+  PaginationParams,
+  PaginatedResponse,
+  parsePaginationParams,
+  calculatePaginationMeta,
+} from '../../../common/models/Pagination';
 
 export class VotingService {
   private nominationRepository: NominationRepository;
@@ -125,6 +131,89 @@ export class VotingService {
     }
 
     return nominationsWithEmployee;
+  }
+
+  /**
+   * Get nominations for current period with pagination using Cosmos DB continuation tokens
+   *
+   * Example usage:
+   * ```typescript
+   * // First page
+   * const page1 = await getNominationsForCurrentPeriodPaginated({ limit: 10 });
+   * // Returns: { data: [...10 items], meta: { continuationToken: "ABC123", hasNextPage: true } }
+   *
+   * // Next page
+   * const page2 = await getNominationsForCurrentPeriodPaginated({
+   *   limit: 10,
+   *   continuationToken: "ABC123"
+   * });
+   * // Returns: { data: [...10 items], meta: { continuationToken: "XYZ789", hasNextPage: true } }
+   * ```
+   *
+   * @param pagination - Pagination parameters (limit, continuationToken)
+   * @returns Paginated response with nominations and metadata
+   */
+  async getNominationsForCurrentPeriodPaginated(
+    pagination: PaginationParams = {}
+  ): Promise<PaginatedResponse<NominationWithEmployee>> {
+    const currentPeriod = await this.getCurrentVotingPeriod();
+    if (!currentPeriod) {
+      return {
+        data: [],
+        meta: calculatePaginationMeta(0, pagination.limit || 10, undefined),
+      };
+    }
+
+    // Parse and validate pagination params
+    const { limit, continuationToken } = parsePaginationParams(pagination);
+
+    // Decode continuation token to get offset
+    let offset = 0;
+    if (continuationToken) {
+      try {
+        const decoded = Buffer.from(continuationToken, 'base64').toString('utf-8');
+        const tokenData = JSON.parse(decoded);
+        offset = tokenData.offset || 0;
+      } catch (error) {
+        console.error('Failed to decode continuation token:', error);
+        offset = 0;
+      }
+    }
+
+    // Query with pagination using offset
+    const result = await this.nominationRepository.findByVotingPeriodPaginated(
+      currentPeriod.id,
+      limit,
+      offset
+    );
+
+    // Enrich nominations with employee data
+    const nominationsWithEmployee: NominationWithEmployee[] = [];
+
+    for (const nomination of result.resources) {
+      const employee = await this.employeeService.getEmployeeById(nomination.nominatedEmployeeId);
+
+      nominationsWithEmployee.push({
+        ...nomination,
+        nominatedEmployee: {
+          fullName: employee?.fullName || 'Unknown Employee',
+          department: employee?.department || 'Unknown',
+          position: employee?.position || 'Unknown',
+        },
+      });
+    }
+
+    // Calculate pagination metadata
+    const meta = calculatePaginationMeta(
+      nominationsWithEmployee.length,
+      limit,
+      result.continuationToken
+    );
+
+    return {
+      data: nominationsWithEmployee,
+      meta,
+    };
   }
 
   async getAllVotingPeriods(): Promise<VotingPeriod[]> {
