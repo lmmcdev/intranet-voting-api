@@ -82,7 +82,6 @@ export async function getDependencies(): Promise<Dependencies> {
       employeeRepository,
       configurationService,
       undefined,
-      undefined,
       auditService
     );
     const azureEmployeeService = new AzureEmployeeService();
@@ -114,7 +113,6 @@ export async function getDependencies(): Promise<Dependencies> {
       notificationService,
       employeeService,
       configurationService,
-      undefined,
       auditService
     );
     const authService = new AuthService(employeeRepository);

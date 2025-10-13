@@ -9,22 +9,18 @@ import {
   BulkUpdateByFilterDto,
 } from './dto/bulk-update-employee.dto';
 import { NameHelper } from '../../common/utils/NameHelper';
-import { CacheService } from '../../common/services/CacheService';
 import { AuditService } from '../../common/services/AuditService';
 import { AuditEntity, AuditAction } from '../../common/models/AuditLog';
 
 export class EmployeeService {
-  private cacheService: CacheService;
   private auditService?: AuditService;
 
   constructor(
     private readonly employeeRepository: EmployeeRepository,
     private readonly configurationService?: ConfigurationService,
     private readonly votingGroupService?: VotingGroupService,
-    cacheService?: CacheService,
     auditService?: AuditService
   ) {
-    this.cacheService = cacheService || new CacheService(10 * 60 * 1000); // 10 minutes default for employees
     this.auditService = auditService;
   }
 
@@ -49,13 +45,7 @@ export class EmployeeService {
   }
 
   async getEmployeeById(id: string): Promise<Employee | null> {
-    const cacheKey = `employee:${id}`;
-
-    return this.cacheService.getOrSet(
-      cacheKey,
-      () => this.employeeRepository.findById(id),
-      10 * 60 * 1000 // 10 minutes
-    );
+    return this.employeeRepository.findById(id);
   }
 
   async getEmployeeCount(): Promise<number> {
@@ -151,10 +141,6 @@ export class EmployeeService {
     const updatedEmployee = await this.employeeRepository.partialUpdate(id, normalizedUpdates);
 
     // Invalidate cache for this employee
-    if (updatedEmployee) {
-      this.cacheService.delete(`employee:${id}`);
-    }
-
     // Log audit
     if (this.auditService && userContext && currentEmployee && updatedEmployee) {
       try {
