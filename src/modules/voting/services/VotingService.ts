@@ -974,8 +974,11 @@ export class VotingService {
     // Save winners to history: general winner and all group winners
     await this.saveWinnersToHistory(votingPeriodId, winners, selectedWinner);
 
-    // Close the voting period commented out to allow manual closing later
-    await this.closeVotingPeriod(votingPeriodId);
+    const period = await this.votingPeriodRepository.findById(votingPeriodId);
+    if (period) {
+      period.status = VotingPeriodStatus.PENDING;
+      await this.votingPeriodRepository.update(votingPeriodId, period);
+    }
 
     return selectedWinner;
   }
