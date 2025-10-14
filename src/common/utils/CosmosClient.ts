@@ -11,14 +11,7 @@ export class CosmosClient {
   private databaseId: string;
 
   constructor(endpoint: string, key: string, databaseId: string) {
-    const options: any = { endpoint, key };
-    
-    // For local emulator, disable SSL verification
-    if (endpoint.startsWith('http://localhost') || endpoint.startsWith('http://127.0.0.1')) {
-      process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-    }
-    
-    this.client = new CosmosSDKClient(options);
+    this.client = new CosmosSDKClient({ endpoint, key });
     this.databaseId = databaseId;
     this.database = this.client.database(databaseId);
   }
