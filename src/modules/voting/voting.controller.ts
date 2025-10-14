@@ -598,11 +598,10 @@ export class VotingController {
       const limit = request.query.get('limit');
       const continuationToken = request.query.get('continuationToken');
 
-      const result =
-        await this.dependencies.votingService.getNominationsForCurrentPeriodPaginated({
-          limit: limit ? parseInt(limit) : undefined,
-          continuationToken: continuationToken || undefined,
-        });
+      const result = await this.dependencies.votingService.getNominationsForCurrentPeriodPaginated({
+        limit: limit ? parseInt(limit) : undefined,
+        continuationToken: continuationToken || undefined,
+      });
 
       return ResponseHelper.paginated(result);
     } catch (error) {
@@ -795,13 +794,9 @@ export class VotingController {
 
       const votingPeriodId = request.query.get('votingPeriodId');
 
-      /*   const results = await this.dependencies.votingService.getEmployeeResults(
+      const results = await this.dependencies.votingService.getNominationsByEmployeeId(
         employeeId,
-        votingPeriodId || undefined
-      ); */
-      const results = await this.dependencies.votingService.getVotingResults(
-        employeeId,
-        votingPeriodId || undefined
+        votingPeriodId
       );
       return ResponseHelper.ok(results);
     } catch (error) {

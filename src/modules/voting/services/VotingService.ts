@@ -523,7 +523,8 @@ export class VotingService {
     return winners;
   }
 
-  async getWinnersGrouped(): Promise<WinnersContainer[]> {
+  /*  async getWinnersGrouped(): Promise<WinnersContainer[]> {
+ 
     const winnersContainers: WinnersContainer[] = [];
 
     // 1. Get all saved winners from history (for CLOSED periods)
@@ -614,6 +615,115 @@ export class VotingService {
       if (a.year !== b.year) return b.year - a.year;
       return b.month - a.month;
     });
+
+    return winnersContainers;
+  } */
+  // new version grouped by period and voting group
+  async getWinnersGrouped(): Promise<WinnersContainer[]> {
+    const winnersContainers: WinnersContainer[] = [];
+
+    // --- helpers ---------------------------------------------------------------
+    const toVoteResult = (w: WinnerHistory): VoteResult => ({
+      votingPeriodId: w.votingPeriodId,
+      employeeId: w.employeeId,
+      employeeName: w.employeeName,
+      department: w.department,
+      position: w.position,
+      nominationCount: w.nominationCount,
+      percentage: w.percentage,
+      rank: w.rank,
+      averageCriteria: w.averageCriteria,
+      votingGroup: w.votingGroup,
+    });
+
+    const buildContainerFromHistory = (
+      periodId: string,
+      winners: WinnerHistory[]
+    ): WinnersContainer | null => {
+      if (!winners.length) return null;
+      const base = winners[0];
+      const winnersByGroup = winners.map(w => ({
+        votingGroup: w.votingGroup ?? 'default',
+        winner: toVoteResult(w),
+      }));
+      return {
+        votingPeriodId: periodId,
+        year: base.year,
+        month: base.month,
+        winnersByGroup,
+      };
+    };
+
+    const buildContainerFromResults = (
+      period: VotingPeriod,
+      results: { winners?: VoteResult[] } | null
+    ): WinnersContainer | null => {
+      const list = results?.winners ?? [];
+      if (!list.length) return null;
+      const winnersByGroup = list.map(w => ({
+        votingGroup: w.votingGroup ?? 'default',
+        winner: w,
+      }));
+      return {
+        votingPeriodId: period.id,
+        year: period.year,
+        month: period.month,
+        winnersByGroup,
+      };
+    };
+
+    // --- 1) closed periods: read saved winners --------------------------------
+    // If your repository supports it, prefer filtering in the DB call:
+    // const allGroupWinners = await this.winnerHistoryRepository.findAll({ winnerType: WinnerType.BY_GROUP });
+    const allWinners = await this.winnerHistoryRepository.findAll();
+
+    // group by period (BY_GROUP only)
+    const winnersByPeriod = allWinners.reduce<Map<string, WinnerHistory[]>>((acc, w) => {
+      if (w.winnerType !== WinnerType.BY_GROUP) return acc;
+      const arr = acc.get(w.votingPeriodId);
+      if (arr) arr.push(w);
+      else acc.set(w.votingPeriodId, [w]);
+      return acc;
+    }, new Map());
+
+    const periodsWithWinners = new Set<string>(winnersByPeriod.keys());
+
+    for (const [periodId, winners] of winnersByPeriod) {
+      const container = buildContainerFromHistory(periodId, winners);
+      if (container) winnersContainers.push(container);
+    }
+
+    // --- 2) pending/active periods: calculate on the fly -----------------------
+    const recentPeriods = await this.votingPeriodRepository.findRecentPeriods();
+
+    const pendingPeriods = recentPeriods.filter(
+      p =>
+        (p.status === VotingPeriodStatus.PENDING || p.status === VotingPeriodStatus.ACTIVE) &&
+        !periodsWithWinners.has(p.id)
+    );
+
+    // Calculate concurrently (and don't fail the whole call if one blows up)
+    const calcResults = await Promise.allSettled(
+      pendingPeriods.map(async period => {
+        try {
+          const results = await this.getVotingResults(period.id);
+          return buildContainerFromResults(period, results);
+        } catch (err) {
+          // swap for your logger if available
+          console.error(`Error calculating results for pending period ${period.id}:`, err);
+          return null;
+        }
+      })
+    );
+
+    for (const r of calcResults) {
+      if (r.status === 'fulfilled' && r.value) {
+        winnersContainers.push(r.value);
+      }
+    }
+
+    // --- 3) sort (most recent first) ------------------------------------------
+    winnersContainers.sort((a, b) => b.year - a.year || b.month - a.month);
 
     return winnersContainers;
   }
@@ -1090,7 +1200,8 @@ export class VotingService {
       const employeeResult = await this.employeeService.getEmployees({
         isActive: true,
       });
-      const allEmployees = 'data' in employeeResult ? employeeResult.data : employeeResult.employees;
+      const allEmployees =
+        'data' in employeeResult ? employeeResult.data : employeeResult.employees;
 
       if (allEmployees.length < 2) {
         result.errors.push('Not enough employees to create nominations');
@@ -1313,5 +1424,12 @@ export class VotingService {
     }
 
     return createdPeriod;
+  }
+
+  async getNominationsByEmployeeId(
+    employeeId: string,
+    votingPeriodId: string
+  ): Promise<Nomination[]> {
+    return await this.nominationRepository.findByPeriodAndEmployeeId(votingPeriodId, employeeId);
   }
 }

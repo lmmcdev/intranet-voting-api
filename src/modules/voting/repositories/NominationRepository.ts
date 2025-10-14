@@ -76,9 +76,7 @@ export class NominationRepository {
               WHERE c.votingPeriodId = @votingPeriodId
               ORDER BY c.createdAt DESC
               OFFSET ${offset} LIMIT ${maxItemCount + 1}`,
-      parameters: [
-        { name: '@votingPeriodId', value: votingPeriodId },
-      ],
+      parameters: [{ name: '@votingPeriodId', value: votingPeriodId }],
     };
 
     const { resources } = await container.items.query<Nomination>(querySpec).fetchAll();
@@ -98,7 +96,7 @@ export class NominationRepository {
       fetchedCount: resources.length,
       returnedCount: nominations.length,
       hasMore,
-      hasContinuationToken: !!nextToken
+      hasContinuationToken: !!nextToken,
     });
 
     return {
@@ -206,8 +204,8 @@ export class NominationRepository {
   }
 
   async findByPeriodAndEmployeeId(
-    employeeId: string,
-    votingPeriodId: string
+    votingPeriodId: string,
+    employeeId: string
   ): Promise<Nomination[]> {
     const container = await this.cosmosClient.getContainer(this.containerName);
     const querySpec = {
@@ -219,6 +217,6 @@ export class NominationRepository {
       ],
     };
     const { resources } = await container.items.query<Nomination>(querySpec).fetchAll();
-    return resources as Nomination[];
+    return resources;
   }
 }
