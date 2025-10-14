@@ -95,13 +95,16 @@ Define cómo agrupar empleados para votaciones.
 ```typescript
 interface VotingGroupConfig {
   id: string;                              // Siempre 'voting-group'
-  strategy: 'location' | 'department' | 'custom';
+  strategy: 'location' | 'department' | 'custom' | 'mixed';
 
   // Agrupar múltiples departamentos en un voting group
   departmentGroupMappings?: DepartmentGroupMapping[];
 
   // Agrupar múltiples ubicaciones en un voting group
   locationGroupMappings?: LocationGroupMapping[];
+
+  // Agrupar departamentos Y ubicaciones juntos en el mismo voting group
+  mixedGroupMappings?: MixedGroupMapping[];
 
   // Mapeos personalizados legacy
   customMappings?: Record<string, string>;
@@ -121,6 +124,12 @@ interface DepartmentGroupMapping {
 interface LocationGroupMapping {
   groupName: string;       // Nombre del voting group
   locations: string[];     // Ubicaciones en este grupo
+}
+
+interface MixedGroupMapping {
+  groupName: string;       // Nombre del voting group
+  departments?: string[];  // Departamentos en este grupo (opcional)
+  locations?: string[];    // Ubicaciones en este grupo (opcional)
 }
 ```
 
@@ -176,7 +185,37 @@ Agrupa empleados por departamento, con opción de consolidar departamentos peque
 }
 ```
 
-#### 3. **Custom**
+#### 3. **Mixed**
+Agrupa departamentos Y ubicaciones juntos en el mismo voting group. Ideal para organizaciones con equipos distribuidos.
+
+**Ejemplo - Grupos mixtos:**
+```json
+{
+  "strategy": "mixed",
+  "mixedGroupMappings": [
+    {
+      "groupName": "Corporate Operations",
+      "departments": ["HR", "Finance", "Legal"],
+      "locations": ["San Diego", "Los Angeles"]
+    },
+    {
+      "groupName": "Field Operations",
+      "departments": ["Sales", "Marketing", "Customer Support"],
+      "locations": ["Tijuana", "Mexicali", "Ensenada"]
+    },
+    {
+      "groupName": "Technology",
+      "departments": ["IT", "Development", "QA"],
+      "locations": ["Guadalajara", "Zapopan"]
+    }
+  ],
+  "fallbackStrategy": "location"
+}
+```
+
+**Nota:** En estrategia `mixed`, un empleado se asigna a un grupo si su location O su department coinciden con algún mapping. Primero se verifica location, luego department.
+
+#### 4. **Custom**
 Usa mapeos personalizados (locations y/o departments) con estrategia de fallback.
 
 **Ejemplo combinando locations y departments:**
@@ -400,7 +439,36 @@ curl -X PUT http://localhost:7071/api/configuration/voting-groups \
   }'
 ```
 
-### Ejemplo 6: Agrupar departamentos pequeños
+### Ejemplo 6: Crear grupos mixtos (departments + locations)
+
+```bash
+curl -X PUT http://localhost:7071/api/configuration/voting-groups \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "strategy": "mixed",
+    "mixedGroupMappings": [
+      {
+        "groupName": "Corporate Operations",
+        "departments": ["HR", "Finance", "Legal"],
+        "locations": ["San Diego", "Los Angeles"]
+      },
+      {
+        "groupName": "Field Operations",
+        "departments": ["Sales", "Marketing", "Customer Support"],
+        "locations": ["Tijuana", "Mexicali", "Ensenada"]
+      },
+      {
+        "groupName": "Technology",
+        "departments": ["IT", "Development", "QA"],
+        "locations": ["Guadalajara", "Zapopan"]
+      }
+    ],
+    "fallbackStrategy": "location"
+  }'
+```
+
+### Ejemplo 7: Agrupar departamentos pequeños
 
 ```bash
 curl -X PUT http://localhost:7071/api/configuration/voting-groups \
@@ -426,7 +494,7 @@ curl -X PUT http://localhost:7071/api/configuration/voting-groups \
   }'
 ```
 
-### Ejemplo 7: Configuración mixta (locations + departments)
+### Ejemplo 8: Configuración mixta (locations + departments)
 
 ```bash
 # 1. Configurar elegibilidad
