@@ -7,10 +7,12 @@ import {
 export class VotingGroupService {
   private config: VotingGroupConfig;
   private departmentGroupMap: Map<string, string> = new Map(); // department -> group name
+  private locationGroupMap: Map<string, string> = new Map(); // location -> group name
 
   constructor(config: VotingGroupConfig) {
     this.config = config;
     this.buildDepartmentGroupMap();
+    this.buildLocationGroupMap();
     console.log(`[VotingGroupService] Initialized with strategy: ${this.config.strategy}`);
   }
 
@@ -33,9 +35,34 @@ export class VotingGroupService {
     }
   }
 
+  /**
+   * Build a map from location names to their assigned voting group
+   */
+  private buildLocationGroupMap(): void {
+    this.locationGroupMap.clear();
+
+    if (this.config.locationGroupMappings) {
+      for (const mapping of this.config.locationGroupMappings) {
+        for (const loc of mapping.locations) {
+          const normalizedLoc = loc.trim().toLowerCase();
+          this.locationGroupMap.set(normalizedLoc, mapping.groupName);
+        }
+      }
+      console.log(
+        `[VotingGroupService] Loaded ${this.locationGroupMap.size} location-to-group mappings`
+      );
+    }
+  }
+
   assignVotingGroup(employee: Employee): string | undefined {
     switch (this.config.strategy) {
       case 'location':
+        // Check if location has a group mapping
+        const normalizedLoc = employee.location?.trim().toLowerCase();
+        if (normalizedLoc && this.locationGroupMap.has(normalizedLoc)) {
+          return this.locationGroupMap.get(normalizedLoc);
+        }
+        // Otherwise return the location itself
         return this.normalizeValue(employee.location);
 
       case 'department':
@@ -56,7 +83,13 @@ export class VotingGroupService {
   }
 
   private getCustomGroup(employee: Employee): string | undefined {
-    // First check department group mappings
+    // First check location group mappings
+    const normalizedLoc = employee.location?.trim().toLowerCase();
+    if (normalizedLoc && this.locationGroupMap.has(normalizedLoc)) {
+      return this.locationGroupMap.get(normalizedLoc);
+    }
+
+    // Then check department group mappings
     const normalizedDept = employee.department?.trim().toLowerCase();
     if (normalizedDept && this.departmentGroupMap.has(normalizedDept)) {
       return this.departmentGroupMap.get(normalizedDept);
@@ -109,6 +142,7 @@ export class VotingGroupService {
   updateConfiguration(config: VotingGroupConfig): void {
     this.config = config;
     this.buildDepartmentGroupMap();
+    this.buildLocationGroupMap();
     console.log(`[VotingGroupService] Configuration updated to strategy: ${this.config.strategy}`);
   }
 }
