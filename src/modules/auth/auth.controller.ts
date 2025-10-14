@@ -14,6 +14,19 @@ export class AuthController {
 
   async login(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
     try {
+      // Handle CORS preflight
+      if (request.method === 'OPTIONS') {
+        return {
+          status: 204,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            'Access-Control-Max-Age': '86400',
+          },
+        };
+      }
+
       if (request.method !== 'POST') {
         return ResponseHelper.methodNotAllowed();
       }
@@ -61,6 +74,19 @@ export class AuthController {
 
   async verifyToken(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
     try {
+      // Handle CORS preflight
+      if (request.method === 'OPTIONS') {
+        return {
+          status: 204,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            'Access-Control-Max-Age': '86400',
+          },
+        };
+      }
+
       if (request.method !== 'GET') {
         return ResponseHelper.methodNotAllowed();
       }
@@ -92,6 +118,19 @@ export class AuthController {
     context: InvocationContext
   ): Promise<HttpResponseInit> {
     try {
+      // Handle CORS preflight
+      if (request.method === 'OPTIONS') {
+        return {
+          status: 204,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            'Access-Control-Max-Age': '86400',
+          },
+        };
+      }
+
       if (request.method !== 'POST') {
         return ResponseHelper.methodNotAllowed();
       }
