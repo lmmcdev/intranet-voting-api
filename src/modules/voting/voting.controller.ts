@@ -994,6 +994,36 @@ export class VotingController {
       return ResponseHelper.internalServerError();
     }
   }
+
+  async getWinnersByVotingPeriodId(
+    request: HttpRequest,
+    context: InvocationContext
+  ): Promise<HttpResponseInit> {
+    try {
+      if (request.method !== 'GET') {
+        return ResponseHelper.methodNotAllowed();
+      }
+
+      const authResult = await AuthHelper.requireAuth(request, context);
+      if (!authResult.success) {
+        return authResult.response;
+      }
+
+      const votingPeriodId = request.params.votingPeriodId;
+      if (!votingPeriodId) {
+        return ResponseHelper.badRequest('Voting period ID is required');
+      }
+
+      const winners = await this.dependencies.votingService.getWinnersByVotingGroup(votingPeriodId);
+      return ResponseHelper.ok(winners);
+    } catch (error) {
+      context.error('Error getting winners by voting period ID:', error);
+      if (error instanceof Error) {
+        return ResponseHelper.badRequest(error.message);
+      }
+      return ResponseHelper.internalServerError();
+    }
+  }
 }
 
 // Azure Functions endpoints
@@ -1395,4 +1425,19 @@ app.http('get-voting-period-audit-history', {
   authLevel: 'anonymous',
   route: 'voting/{votingPeriodId}/audit-history',
   handler: getVotingPeriodAuditHistoryFunction,
+});
+
+const getWinnersByVotingPeriodIdFunction = async (
+  request: HttpRequest,
+  context: InvocationContext
+): Promise<HttpResponseInit> => {
+  const dependencies = await getDependencies();
+  const controller = new VotingController(dependencies);
+  return controller.getWinnersByVotingPeriodId(request, context);
+};
+app.http('get-winners-by-voting-period-id', {
+  methods: ['GET', 'OPTIONS'],
+  authLevel: 'anonymous',
+  route: 'voting/{votingPeriodId}/winners',
+  handler: getWinnersByVotingPeriodIdFunction,
 });
