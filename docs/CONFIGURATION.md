@@ -100,6 +100,9 @@ interface VotingGroupConfig {
   // Agrupar múltiples departamentos en un voting group
   departmentGroupMappings?: DepartmentGroupMapping[];
 
+  // Agrupar múltiples ubicaciones en un voting group
+  locationGroupMappings?: LocationGroupMapping[];
+
   // Mapeos personalizados legacy
   customMappings?: Record<string, string>;
 
@@ -114,16 +117,43 @@ interface DepartmentGroupMapping {
   groupName: string;       // Nombre del voting group
   departments: string[];   // Departamentos en este grupo
 }
+
+interface LocationGroupMapping {
+  groupName: string;       // Nombre del voting group
+  locations: string[];     // Ubicaciones en este grupo
+}
 ```
 
 ### Estrategias
 
 #### 1. **Location** (Por defecto)
-Agrupa empleados por su ubicación física.
+Agrupa empleados por su ubicación física. Se puede consolidar múltiples ubicaciones en grupos regionales.
 
+**Simple - Sin agrupación:**
 ```json
 {
   "strategy": "location"
+}
+```
+
+**Con agrupación de ubicaciones:**
+```json
+{
+  "strategy": "location",
+  "locationGroupMappings": [
+    {
+      "groupName": "Región Norte",
+      "locations": ["Tijuana", "Mexicali", "Ensenada"]
+    },
+    {
+      "groupName": "Región Centro",
+      "locations": ["Guadalajara", "Zapopan", "León"]
+    },
+    {
+      "groupName": "Región Sur",
+      "locations": ["Cancún", "Mérida", "Playa del Carmen"]
+    }
+  ]
 }
 ```
 
@@ -147,11 +177,18 @@ Agrupa empleados por departamento, con opción de consolidar departamentos peque
 ```
 
 #### 3. **Custom**
-Usa mapeos personalizados con estrategia de fallback.
+Usa mapeos personalizados (locations y/o departments) con estrategia de fallback.
 
+**Ejemplo combinando locations y departments:**
 ```json
 {
   "strategy": "custom",
+  "locationGroupMappings": [
+    {
+      "groupName": "Región Pacífico",
+      "locations": ["San Diego", "Los Angeles", "San Francisco"]
+    }
+  ],
   "departmentGroupMappings": [
     {
       "groupName": "Operaciones",
@@ -161,6 +198,8 @@ Usa mapeos personalizados con estrategia de fallback.
   "fallbackStrategy": "location"
 }
 ```
+
+**Nota:** En estrategia `custom`, se verifica primero `locationGroupMappings`, luego `departmentGroupMappings`, después `customMappings` legacy, y finalmente se usa `fallbackStrategy`.
 
 ---
 
@@ -319,7 +358,49 @@ curl -X PUT http://localhost:7071/api/configuration/eligibility \
   }'
 ```
 
-### Ejemplo 4: Agrupar departamentos pequeños
+### Ejemplo 4: Agrupar 3 locations en un grupo de votación
+
+```bash
+curl -X PUT http://localhost:7071/api/configuration/voting-groups \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "strategy": "location",
+    "locationGroupMappings": [
+      {
+        "groupName": "Región Pacífico",
+        "locations": ["San Diego", "Los Angeles", "San Francisco"]
+      }
+    ]
+  }'
+```
+
+### Ejemplo 5: Agrupar múltiples regiones por ubicación
+
+```bash
+curl -X PUT http://localhost:7071/api/configuration/voting-groups \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "strategy": "location",
+    "locationGroupMappings": [
+      {
+        "groupName": "Región Norte",
+        "locations": ["Tijuana", "Mexicali", "Ensenada"]
+      },
+      {
+        "groupName": "Región Centro",
+        "locations": ["Guadalajara", "Zapopan", "León"]
+      },
+      {
+        "groupName": "Región Sur",
+        "locations": ["Cancún", "Mérida", "Playa del Carmen"]
+      }
+    ]
+  }'
+```
+
+### Ejemplo 6: Agrupar departamentos pequeños
 
 ```bash
 curl -X PUT http://localhost:7071/api/configuration/voting-groups \
@@ -345,7 +426,7 @@ curl -X PUT http://localhost:7071/api/configuration/voting-groups \
   }'
 ```
 
-### Ejemplo 5: Configuración completa para empresa
+### Ejemplo 7: Configuración mixta (locations + departments)
 
 ```bash
 # 1. Configurar elegibilidad
