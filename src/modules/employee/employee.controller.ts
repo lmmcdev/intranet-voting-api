@@ -214,6 +214,14 @@ export class EmployeeController {
         return authResult.response;
       }
 
+      // Check if the request wants counts included
+      const includeCount = request.query.get('includeCount') === 'true';
+
+      if (includeCount) {
+        const locationsWithCount = await this.employeeService.getLocationsWithCount();
+        return ResponseHelper.ok(locationsWithCount);
+      }
+
       const locations = await this.employeeService.getLocations();
       return ResponseHelper.ok(locations);
     } catch (error) {
@@ -234,6 +242,14 @@ export class EmployeeController {
       const authResult = await AuthHelper.requireAuth(request, context);
       if (!authResult.success) {
         return authResult.response;
+      }
+
+      // Check if the request wants counts included
+      const includeCount = request.query.get('includeCount') === 'true';
+
+      if (includeCount) {
+        const departmentsWithCount = await this.employeeService.getDepartmentsWithCount();
+        return ResponseHelper.ok(departmentsWithCount);
       }
 
       const departments = await this.employeeService.getDepartments();

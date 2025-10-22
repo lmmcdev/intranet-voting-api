@@ -8,6 +8,8 @@ import {
   BulkUpdateEmployeesResponseDto,
   BulkUpdateByFilterDto,
 } from './dto/bulk-update-employee.dto';
+import { DepartmentCountDto } from './dto/department-count.dto';
+import { LocationCountDto } from './dto/location-count.dto';
 import { NameHelper } from '../../common/utils/NameHelper';
 import { AuditService } from '../../common/services/AuditService';
 import { AuditEntity, AuditAction } from '../../common/models/AuditLog';
@@ -141,8 +143,16 @@ export class EmployeeService {
     return this.employeeRepository.getDistinctLocations();
   }
 
+  async getLocationsWithCount(): Promise<LocationCountDto[]> {
+    return this.employeeRepository.getLocationsWithCount();
+  }
+
   async getDepartments(): Promise<string[]> {
     return this.employeeRepository.getDistinctDepartments();
+  }
+
+  async getDepartmentsWithCount(): Promise<DepartmentCountDto[]> {
+    return this.employeeRepository.getDepartmentsWithCount();
   }
 
   async getPositions(): Promise<string[]> {
