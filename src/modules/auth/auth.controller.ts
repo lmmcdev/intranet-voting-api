@@ -37,19 +37,21 @@ export class AuthController {
         return ResponseHelper.badRequest('Username and password are required');
       }
 
-      context.log(`Login attempt for username: ${body.username}`);
+      const username = body.username.trim().toLowerCase();
+      const password = body.password;
+      context.log(`Login attempt for username: ${username}`);
 
       const result = await this.authService.login({
-        username: body.username,
-        password: body.password,
+        username,
+        password,
       });
 
       if (!result.success) {
-        context.warn(`Login failed for username: ${body.username} - ${result.message}`);
+        context.warn(`Login failed for username: ${username} - ${result.message}`);
         return ResponseHelper.unauthorized(result.message || 'Authentication failed');
       }
 
-      context.log(`Login successful for username: ${body.username}`);
+      context.log(`Login successful for username: ${username}`);
 
       return ResponseHelper.ok({
         message: 'Login successful',
