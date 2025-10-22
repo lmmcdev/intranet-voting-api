@@ -391,6 +391,24 @@ export class EmployeeRepository {
     return resources;
   }
 
+  async getLocationsWithCount(): Promise<Array<{ location: string; count: number }>> {
+    const container = await this.cosmosClient.getContainer(this.containerName);
+
+    const querySpec = {
+      query: `
+        SELECT c.location, COUNT(1) as count
+        FROM c
+        WHERE IS_DEFINED(c.location) AND c.location != null AND c.location != ""
+        GROUP BY c.location
+        ORDER BY c.location
+      `,
+      parameters: [],
+    };
+
+    const { resources } = await container.items.query<{ location: string; count: number }>(querySpec).fetchAll();
+    return resources;
+  }
+
   async getDistinctDepartments(): Promise<string[]> {
     const container = await this.cosmosClient.getContainer(this.containerName);
 
@@ -405,6 +423,24 @@ export class EmployeeRepository {
     };
 
     const { resources } = await container.items.query<string>(querySpec).fetchAll();
+    return resources;
+  }
+
+  async getDepartmentsWithCount(): Promise<Array<{ department: string; count: number }>> {
+    const container = await this.cosmosClient.getContainer(this.containerName);
+
+    const querySpec = {
+      query: `
+        SELECT c.department, COUNT(1) as count
+        FROM c
+        WHERE IS_DEFINED(c.department) AND c.department != null AND c.department != ""
+        GROUP BY c.department
+        ORDER BY c.department
+      `,
+      parameters: [],
+    };
+
+    const { resources } = await container.items.query<{ department: string; count: number }>(querySpec).fetchAll();
     return resources;
   }
 
